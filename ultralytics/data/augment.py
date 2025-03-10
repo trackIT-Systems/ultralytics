@@ -942,7 +942,8 @@ class MixUp(BaseMixTransform):
         """
         r = np.random.beta(32.0, 32.0)  # mixup ratio, alpha=beta=32.0
         labels2 = labels["mix_labels"][0]
-        labels["img"] = (labels["img"] * r + labels2["img"] * (1 - r)).astype(np.uint8)
+        #labels["img"] = (labels["img"] * r + labels2["img"] * (1 - r)).astype(np.uint8)
+        labels["img"] = np.maximum(labels["img"], labels2["img"]).astype(np.uint8)
         labels["instances"] = Instances.concatenate([labels["instances"], labels2["instances"]], axis=0)
         labels["cls"] = np.concatenate([labels["cls"], labels2["cls"]], 0)
         return labels
@@ -1363,6 +1364,8 @@ class RandomHSV:
             >>> augmented_img = labels["img"]
         """
         img = labels["img"]
+        img = np.ascontiguousarray(img)
+        print(img.shape)
         if self.hgain or self.sgain or self.vgain:
             r = np.random.uniform(-1, 1, 3) * [self.hgain, self.sgain, self.vgain] + 1  # random gains
             hue, sat, val = cv2.split(cv2.cvtColor(img, cv2.COLOR_BGR2HSV))
@@ -1587,8 +1590,8 @@ class LetterBox:
         img = cv2.copyMakeBorder(
             img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114)
         )  # add border
-        if labels.get("ratio_pad"):
-            labels["ratio_pad"] = (labels["ratio_pad"], (left, top))  # for evaluation
+        # if labels.get("ratio_pad"):
+        #     labels["ratio_pad"] = (labels["ratio_pad"], (left, top))  # for evaluation
 
         if len(labels):
             labels = self._update_labels(labels, ratio, dw, dh)
@@ -1755,7 +1758,7 @@ class Albumentations:
         - Spatial transforms are handled differently and require special processing for bounding boxes.
     """
 
-    def __init__(self, p=1.0):
+    def __init__(self, hyp: dict=None, p=1.0):
         """
         Initialize the Albumentations transform object for YOLO bbox formatted parameters.
 
@@ -1787,6 +1790,7 @@ class Albumentations:
             - Some transforms are applied with very low probability (0.01) by default.
         """
         self.p = p
+        self.hyp = hyp
         self.transform = None
         prefix = colorstr("albumentations: ")
 
@@ -1841,19 +1845,41 @@ class Albumentations:
 
             # Transforms
             T = [
-                A.Blur(p=0.01),
-                A.MedianBlur(p=0.01),
-                A.ToGray(p=0.01),
-                A.CLAHE(p=0.01),
-                A.RandomBrightnessContrast(p=0.0),
-                A.RandomGamma(p=0.0),
-                A.ImageCompression(quality_lower=75, p=0.0),
+                A.OneOf([
+                    A.CLAHE(p=hyp.clahe),
+                    A.RandomBrightnessContrast(brightness_limit=hyp.rbc_brightness_limit, 
+                                               contrast_limit=hyp.rbc_contrast_limit,
+                                               p=hyp.brightness_contrast),
+                    A.RandomGamma(p=hyp.random_gamma)], 
+                    p=hyp.group_contrast
+                ),
+                A.Downscale(scale_range=hyp.ds_scale_range, p=hyp.downscale),
+                A.Emboss(alpha=hyp.emboss_alpha, strength=hyp.emboss_strength, p=hyp.emboss),
+                A.OneOf([
+                    A.Blur(p=hyp.blur),
+                    A.MedianBlur(p=hyp.median_blur),
+                    A.GaussianBlur(p=hyp.gaussian_blur)], 
+                    p=hyp.group_blur),
+                A.RandomFog(p=hyp.random_fog),
+                A.RandomSizedBBoxSafeCrop(height=hyp.imgsz[0], 
+                                          width=hyp.imgsz[1], 
+                                          p=hyp.bbox_safecrop),
+                A.XYMasking(
+                    num_masks_x=hyp.xy_num_masks_x,  # ScaleIntType
+                    num_masks_y=hyp.xy_num_masks_y,  # ScaleIntType
+                    mask_x_length=hyp.xy_mask_x_length,  # ScaleIntType
+                    mask_y_length=hyp.xy_mask_y_length,  # ScaleIntType
+                    p=hyp.xy_masking,  # float
+                ),
+                A.PixelDropout(dropout_prob=hyp.pd_dropout_prob, p=hyp.pixel_dropout),
             ]
-
             # Compose transforms
             self.contains_spatial = any(transform.__class__.__name__ in spatial_transforms for transform in T)
             self.transform = (
-                A.Compose(T, bbox_params=A.BboxParams(format="yolo", label_fields=["class_labels"]))
+                A.Compose(T, bbox_params=A.BboxParams(format="yolo", 
+                                                      label_fields=["class_labels"], 
+                                                      min_visibility=hyp.bbox_min_visibility, 
+                                                      clip=True))
                 if self.contains_spatial
                 else A.Compose(T)
             )
@@ -2293,28 +2319,28 @@ def v8_transforms(dataset, imgsz, hyp, stretch=False):
         >>> transforms = v8_transforms(dataset, imgsz=640, hyp=hyp)
         >>> augmented_data = transforms(dataset[0])
     """
-    mosaic = Mosaic(dataset, imgsz=imgsz, p=hyp.mosaic)
-    affine = RandomPerspective(
-        degrees=hyp.degrees,
-        translate=hyp.translate,
-        scale=hyp.scale,
-        shear=hyp.shear,
-        perspective=hyp.perspective,
-        pre_transform=None if stretch else LetterBox(new_shape=(imgsz, imgsz)),
-    )
+    #mosaic = Mosaic(dataset, imgsz=imgsz, p=hyp.mosaic)
+    # affine = RandomPerspective(
+    #     degrees=hyp.degrees,
+    #     translate=hyp.translate,
+    #     scale=hyp.scale,
+    #     shear=hyp.shear,
+    #     perspective=hyp.perspective,
+    #     pre_transform=None if stretch else LetterBox(new_shape=(imgsz, imgsz)),
+    # )
 
-    pre_transform = Compose([mosaic, affine])
-    if hyp.copy_paste_mode == "flip":
-        pre_transform.insert(1, CopyPaste(p=hyp.copy_paste, mode=hyp.copy_paste_mode))
-    else:
-        pre_transform.append(
-            CopyPaste(
-                dataset,
-                pre_transform=Compose([Mosaic(dataset, imgsz=imgsz, p=hyp.mosaic), affine]),
-                p=hyp.copy_paste,
-                mode=hyp.copy_paste_mode,
-            )
-        )
+    pre_transform = Compose([])#mosaic])#, affine])
+    # if hyp.copy_paste_mode == "flip":
+    #     pre_transform.insert(1, CopyPaste(p=hyp.copy_paste, mode=hyp.copy_paste_mode))
+    # else:
+    #     pre_transform.append(
+    #         CopyPaste(
+    #             dataset,
+    #             pre_transform=Compose([Mosaic(dataset, imgsz=imgsz, p=hyp.mosaic)]),
+    #             p=hyp.copy_paste,
+    #             mode=hyp.copy_paste_mode,
+    #         )
+    #     )
     flip_idx = dataset.data.get("flip_idx", [])  # for keypoints augmentation
     if dataset.use_keypoints:
         kpt_shape = dataset.data.get("kpt_shape", None)
@@ -2326,12 +2352,12 @@ def v8_transforms(dataset, imgsz, hyp, stretch=False):
 
     return Compose(
         [
-            pre_transform,
-            MixUp(dataset, pre_transform=pre_transform, p=hyp.mixup),
-            Albumentations(p=1.0),
-            RandomHSV(hgain=hyp.hsv_h, sgain=hyp.hsv_s, vgain=hyp.hsv_v),
-            RandomFlip(direction="vertical", p=hyp.flipud),
-            RandomFlip(direction="horizontal", p=hyp.fliplr, flip_idx=flip_idx),
+            #mosaic,#pre_transform,
+            MixUp(dataset, pre_transform=pre_transform, p=hyp.mixup),#MixUp(dataset, pre_transform=pre_transform, p=hyp.mixup),
+            Albumentations(hyp=hyp, p=1.0),
+            #RandomHSV(hgain=hyp.hsv_h, sgain=hyp.hsv_s, vgain=hyp.hsv_v),
+            #RandomFlip(direction="vertical", p=hyp.flipud),
+            #RandomFlip(direction="horizontal", p=hyp.fliplr, flip_idx=flip_idx),
         ]
     )  # transforms
 

@@ -161,6 +161,9 @@ class Exporter:
             _callbacks (dict, optional): Dictionary of callback functions. Defaults to None.
         """
         self.args = get_cfg(cfg, overrides)
+        self.output_path = f'/src/model_export/{self.args.version}_{self.args.release}'
+        os.makedirs(self.output_path, exist_ok=True)
+
         if self.args.format.lower() in {"coreml", "mlmodel"}:  # fix attempt for protobuf<3.20.x errors
             os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"  # must run before TensorBoard callback
 
@@ -229,6 +232,7 @@ class Exporter:
                 "(torchscript, onnx, openvino, engine, coreml) formats. "
                 "See https://docs.ultralytics.com/models/yolo-world for details."
             )
+        self.args.data = model.args['data']
         if self.args.int8 and not self.args.data:
             self.args.data = DEFAULT_CFG.data or TASK2DATA[getattr(model, "task", "detect")]  # assign default data
             LOGGER.warning(
@@ -274,7 +278,7 @@ class Exporter:
         # Assign
         self.im = im
         self.model = model
-        self.file = file
+        self.file = Path(self.output_path) #file
         self.output_shape = (
             tuple(y.shape)
             if isinstance(y, torch.Tensor)
@@ -288,6 +292,9 @@ class Exporter:
             "author": "Ultralytics",
             "date": datetime.now().isoformat(),
             "version": __version__,
+            "training": self.args.name,
+            "model_version": self.args.version,
+            "release": self.args.release,
             "license": "AGPL-3.0 License (https://ultralytics.com/license)",
             "docs": "https://docs.ultralytics.com",
             "stride": int(max(model.stride)),
@@ -295,6 +302,9 @@ class Exporter:
             "batch": self.args.batch,
             "imgsz": self.imgsz,
             "names": model.names,
+            "n_fft": self.args.n_fft,
+            "sample_rate": self.args.sr,
+            "hop_length": self.args.hop_length
         }  # model metadata
         if model.task == "pose":
             self.metadata["kpt_shape"] = model.model[-1].kpt_shape
@@ -313,7 +323,7 @@ class Exporter:
         if onnx:  # ONNX
             f[2], _ = self.export_onnx()
         if xml:  # OpenVINO
-            f[3], _ = self.export_openvino()
+            f[3], _ = self.export_openvino(dataset=self.args.dataset)
         if coreml:  # CoreML
             f[4], _ = self.export_coreml()
         if is_tf_format:  # TensorFlow formats
@@ -348,7 +358,8 @@ class Exporter:
             q = "int8" if self.args.int8 else "half" if self.args.half else ""  # quantization
             LOGGER.info(
                 f'\nExport complete ({time.time() - t:.1f}s)'
-                f"\nResults saved to {colorstr('bold', file.parent.resolve())}"
+                #f"\nResults saved to {colorstr('bold', self.file.parent.resolve())}"
+                f"\nResults saved to {colorstr('bold', self.file.resolve())}"
                 f'\nPredict:         yolo predict task={model.task} model={f} imgsz={imgsz} {q} {predict_data}'
                 f'\nValidate:        yolo val task={model.task} model={f} imgsz={imgsz} data={data} {q} {s}'
                 f'\nVisualize:       https://netron.app'
@@ -357,13 +368,13 @@ class Exporter:
         self.run_callbacks("on_export_end")
         return f  # return list of exported files/dirs
 
-    def get_int8_calibration_dataloader(self, prefix=""):
+    def get_int8_calibration_dataloader(self, prefix="", dataset=None):
         """Build and return a dataloader suitable for calibration of INT8 models."""
         LOGGER.info(f"{prefix} collecting INT8 calibration images from 'data={self.args.data}'")
         data = (check_cls_dataset if self.model.task == "classify" else check_det_dataset)(self.args.data)
         # TensorRT INT8 calibration should use 2x batch size
         batch = self.args.batch * (2 if self.args.format == "engine" else 1)
-        dataset = YOLODataset(
+        dataset = dataset if dataset else YOLODataset(
             data[self.args.split or "val"],
             data=data,
             task=self.model.task,
@@ -380,7 +391,8 @@ class Exporter:
     def export_torchscript(self, prefix=colorstr("TorchScript:")):
         """YOLO TorchScript model export."""
         LOGGER.info(f"\n{prefix} starting export with torch {torch.__version__}...")
-        f = self.file.with_suffix(".torchscript")
+        #f = self.file.with_suffix(".torchscript")
+        f = self.file / "model.torchscript"
 
         ts = torch.jit.trace(self.model, self.im, strict=False)
         extra_files = {"config.txt": json.dumps(self.metadata)}  # torch._C.ExtraFilesMap()
@@ -402,9 +414,14 @@ class Exporter:
         check_requirements(requirements)
         import onnx  # noqa
 
+        self.file = self.file / "onnx"
+
+        self.file.mkdir(parents=True, exist_ok=False)
+
         opset_version = self.args.opset or get_latest_opset()
         LOGGER.info(f"\n{prefix} starting export with onnx {onnx.__version__} opset {opset_version}...")
-        f = str(self.file.with_suffix(".onnx"))
+        #f = str(self.file.with_suffix(".onnx"))
+        f = str(self.file / "model.onnx")
 
         output_names = ["output0", "output1"] if isinstance(self.model, SegmentationModel) else ["output0"]
         dynamic = self.args.dynamic
@@ -451,10 +468,12 @@ class Exporter:
         return f, model_onnx
 
     @try_export
-    def export_openvino(self, prefix=colorstr("OpenVINO:")):
+    def export_openvino(self, dataset=None, prefix=colorstr("OpenVINO:")):
         """YOLO OpenVINO export."""
         check_requirements(f'openvino{"<=2024.0.0" if ARM64 else ">=2024.0.0"}')  # fix OpenVINO issue on ARM64
         import openvino as ov
+
+        self.file = self.file / "openvino"
 
         LOGGER.info(f"\n{prefix} starting export with openvino {ov.__version__}...")
         assert TORCH_1_13, f"OpenVINO export requires torch>=1.13.0 but torch=={torch.__version__} is installed"
@@ -479,14 +498,17 @@ class Exporter:
             yaml_save(Path(file).parent / "metadata.yaml", self.metadata)  # add metadata.yaml
 
         if self.args.int8:
-            fq = str(self.file).replace(self.file.suffix, f"_int8_openvino_model{os.sep}")
-            fq_ov = str(Path(fq) / self.file.with_suffix(".xml").name)
+            #fq = str(self.file).replace(self.file.suffix, f"_int8_openvino_model{os.sep}")
+            fq = self.file
+            #fq_ov = str(Path(fq) / self.file.with_suffix(".xml").name)
+            fq_ov = str(Path(fq) / "model.xml")
             check_requirements("nncf>=2.8.0")
             import nncf
 
             def transform_fn(data_item) -> np.ndarray:
                 """Quantization transform function."""
                 data_item: torch.Tensor = data_item["img"] if isinstance(data_item, dict) else data_item
+                data_item = data_item.to(torch.uint8)
                 assert data_item.dtype == torch.uint8, "Input image must be uint8 for the quantization preprocessing"
                 im = data_item.numpy().astype(np.float32) / 255.0  # uint8 to fp16/32 and 0 - 255 to 0.0 - 1.0
                 return np.expand_dims(im, 0) if im.ndim == 3 else im
@@ -509,15 +531,17 @@ class Exporter:
 
             quantized_ov_model = nncf.quantize(
                 model=ov_model,
-                calibration_dataset=nncf.Dataset(self.get_int8_calibration_dataloader(prefix), transform_fn),
+                calibration_dataset=nncf.Dataset(self.get_int8_calibration_dataloader(prefix, dataset), transform_fn),
                 preset=nncf.QuantizationPreset.MIXED,
                 ignored_scope=ignored_scope,
             )
             serialize(quantized_ov_model, fq_ov)
             return fq, None
 
-        f = str(self.file).replace(self.file.suffix, f"_openvino_model{os.sep}")
-        f_ov = str(Path(f) / self.file.with_suffix(".xml").name)
+        #f = str(self.file).replace(self.file.suffix, f"_openvino_model{os.sep}")
+        f = self.file
+        #f_ov = str(Path(f) / self.file.with_suffix(".xml").name)
+        f_ov = str(Path(f) / "model.xml")
 
         serialize(ov_model, f_ov)
         return f, None
@@ -542,9 +566,13 @@ class Exporter:
         check_requirements("ncnn")
         import ncnn  # noqa
 
+        f_ts = str(self.file / "model.torchscript")
+        self.file = self.file / "ncnn"
+
         LOGGER.info(f"\n{prefix} starting export with NCNN {ncnn.__version__}...")
-        f = Path(str(self.file).replace(self.file.suffix, f"_ncnn_model{os.sep}"))
-        f_ts = self.file.with_suffix(".torchscript")
+        #f = Path(str(self.file).replace(self.file.suffix, f"_ncnn_model{os.sep}"))
+        f = Path(self.file)
+        #f_ts = self.file.with_suffix(".torchscript")
 
         name = Path("pnnx.exe" if WINDOWS else "pnnx")  # PNNX filename
         pnnx = name if name.is_file() else (ROOT / name)

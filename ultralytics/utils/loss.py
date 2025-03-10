@@ -163,7 +163,7 @@ class v8DetectionLoss:
         h = model.args  # hyperparameters
 
         m = model.model[-1]  # Detect() module
-        self.bce = nn.BCEWithLogitsLoss(reduction="none")
+        self.bce = nn.BCEWithLogitsLoss(reduction="none", pos_weight=h.class_weights)
         self.hyp = h
         self.stride = m.stride  # model strides
         self.nc = m.nc  # number of classes
