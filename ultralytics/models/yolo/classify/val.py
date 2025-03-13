@@ -1,4 +1,4 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 
 import torch
 
@@ -16,14 +16,11 @@ class ClassificationValidator(BaseValidator):
     Notes:
         - Torchvision classification models can also be passed to the 'model' argument, i.e. model='resnet18'.
 
-    Example:
-        ```python
-        from ultralytics.models.yolo.classify import ClassificationValidator
-
-        args = dict(model="yolov8n-cls.pt", data="imagenet10")
-        validator = ClassificationValidator(args=args)
-        validator()
-        ```
+    Examples:
+        >>> from ultralytics.models.yolo.classify import ClassificationValidator
+        >>> args = dict(model="yolo11n-cls.pt", data="imagenet10")
+        >>> validator = ClassificationValidator(args=args)
+        >>> validator()
     """
 
     def __init__(self, dataloader=None, save_dir=None, pbar=None, args=None, _callbacks=None):
@@ -70,6 +67,10 @@ class ClassificationValidator(BaseValidator):
         self.metrics.speed = self.speed
         self.metrics.confusion_matrix = self.confusion_matrix
         self.metrics.save_dir = self.save_dir
+
+    def postprocess(self, preds):
+        """Preprocesses the classification predictions."""
+        return preds[0] if isinstance(preds, (list, tuple)) else preds
 
     def get_stats(self):
         """Returns a dictionary of metrics obtained by processing targets and predictions."""

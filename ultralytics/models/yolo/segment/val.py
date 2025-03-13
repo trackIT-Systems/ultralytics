@@ -1,4 +1,4 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 
 from multiprocessing.pool import ThreadPool
 from pathlib import Path
@@ -18,14 +18,11 @@ class SegmentationValidator(DetectionValidator):
     """
     A class extending the DetectionValidator class for validation based on a segmentation model.
 
-    Example:
-        ```python
-        from ultralytics.models.yolo.segment import SegmentationValidator
-
-        args = dict(model="yolov8n-seg.pt", data="coco8-seg.yaml")
-        validator = SegmentationValidator(args=args)
-        validator()
-        ```
+    Examples:
+        >>> from ultralytics.models.yolo.segment import SegmentationValidator
+        >>> args = dict(model="yolo11n-seg.pt", data="coco8-seg.yaml")
+        >>> validator = SegmentationValidator(args=args)
+        >>> validator()
     """
 
     def __init__(self, dataloader=None, save_dir=None, pbar=None, args=None, _callbacks=None):
@@ -34,7 +31,7 @@ class SegmentationValidator(DetectionValidator):
         self.plot_masks = None
         self.process = None
         self.args.task = "segment"
-        self.metrics = SegmentMetrics(save_dir=self.save_dir, on_plot=self.on_plot)
+        self.metrics = SegmentMetrics(save_dir=self.save_dir)
 
     def preprocess(self, batch):
         """Preprocesses batch by converting masks to float and sending to device."""
@@ -70,16 +67,7 @@ class SegmentationValidator(DetectionValidator):
 
     def postprocess(self, preds):
         """Post-processes YOLO predictions and returns output detections with proto."""
-        p = ops.non_max_suppression(
-            preds[0],
-            self.args.conf,
-            self.args.iou,
-            labels=self.lb,
-            multi_label=True,
-            agnostic=self.args.single_cls or self.args.agnostic_nms,
-            max_det=self.args.max_det,
-            nc=self.nc,
-        )
+        p = super().postprocess(preds[0])
         proto = preds[1][-1] if len(preds[1]) == 3 else preds[1]  # second output is len 3 if pt, but only 1 if exported
         return p, proto
 
@@ -135,8 +123,8 @@ class SegmentationValidator(DetectionValidator):
                 stat["tp_m"] = self._process_batch(
                     predn, bbox, cls, pred_masks, gt_masks, self.args.overlap_mask, masks=True
                 )
-                if self.args.plots:
-                    self.confusion_matrix.process_batch(predn, bbox, cls)
+            if self.args.plots:
+                self.confusion_matrix.process_batch(predn, bbox, cls)
 
             for k in self.stats.keys():
                 self.stats[k].append(stat[k])
@@ -162,7 +150,7 @@ class SegmentationValidator(DetectionValidator):
                     pred_masks,
                     self.args.save_conf,
                     pbatch["ori_shape"],
-                    self.save_dir / "labels" / f'{Path(batch["im_file"][si]).stem}.txt',
+                    self.save_dir / "labels" / f"{Path(batch['im_file'][si]).stem}.txt",
                 )
 
     def finalize_metrics(self, *args, **kwargs):
@@ -193,13 +181,11 @@ class SegmentationValidator(DetectionValidator):
             - If `masks` is True, the function computes IoU between predicted and ground truth masks.
             - If `overlap` is True and `masks` is True, overlapping masks are taken into account when computing IoU.
 
-        Example:
-            ```python
-            detections = torch.tensor([[25, 30, 200, 300, 0.8, 1], [50, 60, 180, 290, 0.75, 0]])
-            gt_bboxes = torch.tensor([[24, 29, 199, 299], [55, 65, 185, 295]])
-            gt_cls = torch.tensor([1, 0])
-            correct_preds = validator._process_batch(detections, gt_bboxes, gt_cls)
-            ```
+        Examples:
+            >>> detections = torch.tensor([[25, 30, 200, 300, 0.8, 1], [50, 60, 180, 290, 0.75, 0]])
+            >>> gt_bboxes = torch.tensor([[24, 29, 199, 299], [55, 65, 185, 295]])
+            >>> gt_cls = torch.tensor([1, 0])
+            >>> correct_preds = validator._process_batch(detections, gt_bboxes, gt_cls)
         """
         if masks:
             if overlap:

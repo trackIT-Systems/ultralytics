@@ -19,7 +19,11 @@ Ultralytics provides support for various datasets to facilitate computer vision 
   <strong>Watch:</strong> Ultralytics Datasets Overview
 </p>
 
-## Ultralytics Explorer 🚀 NEW
+## Ultralytics Explorer
+
+!!! warning "Community Note ⚠️"
+
+    As of **`ultralytics>=8.3.10`**, Ultralytics explorer support has been deprecated. But don't worry! You can now access similar and even enhanced functionality through [Ultralytics HUB](https://hub.ultralytics.com/), our intuitive no-code platform designed to streamline your workflow. With Ultralytics HUB, you can continue exploring, visualizing, and managing your data effortlessly, all without writing a single line of code. Make sure to check it out and take advantage of its powerful features!🚀
 
 Create [embeddings](https://www.ultralytics.com/glossary/embeddings) for your dataset, search for similar images, run SQL queries, perform semantic search and even search using natural language! You can get started with our GUI app or build your own using the API. Learn more [here](explorer/index.md).
 
@@ -38,7 +42,7 @@ Create [embeddings](https://www.ultralytics.com/glossary/embeddings) for your da
 - [COCO](detect/coco.md): Common Objects in Context (COCO) is a large-scale object detection, segmentation, and captioning dataset with 80 object categories.
 - [LVIS](detect/lvis.md): A large-scale object detection, segmentation, and captioning dataset with 1203 object categories.
 - [COCO8](detect/coco8.md): A smaller subset of the first 4 images from COCO train and COCO val, suitable for quick tests.
-- [COCO128](detect/coco.md): A smaller subset of the first 128 images from COCO train and COCO val, suitable for tests.
+- [COCO128](detect/coco128.md): A smaller subset of the first 128 images from COCO train and COCO val, suitable for tests.
 - [Global Wheat 2020](detect/globalwheat2020.md): A dataset containing images of wheat heads for the Global Wheat Challenge 2020.
 - [Objects365](detect/objects365.md): A high-quality, large-scale dataset for object detection with 365 object categories and over 600K annotated images.
 - [OpenImagesV7](detect/open-images-v7.md): A comprehensive dataset by Google with 1.7M train images and 42k validation images.
@@ -46,10 +50,11 @@ Create [embeddings](https://www.ultralytics.com/glossary/embeddings) for your da
 - [VisDrone](detect/visdrone.md): A dataset containing object detection and multi-object tracking data from drone-captured imagery with over 10K images and video sequences.
 - [VOC](detect/voc.md): The Pascal Visual Object Classes (VOC) dataset for object detection and segmentation with 20 object classes and over 11K images.
 - [xView](detect/xview.md): A dataset for object detection in overhead imagery with 60 object categories and over 1 million annotated objects.
-- [Roboflow 100](detect/roboflow-100.md): A diverse object detection benchmark with 100 datasets spanning seven imagery domains for comprehensive model evaluation.
+- [RF100](detect/roboflow-100.md): A diverse object detection benchmark with 100 datasets spanning seven imagery domains for comprehensive model evaluation.
 - [Brain-tumor](detect/brain-tumor.md): A dataset for detecting brain tumors includes MRI or CT scan images with details on tumor presence, location, and characteristics.
 - [African-wildlife](detect/african-wildlife.md): A dataset featuring images of African wildlife, including buffalo, elephant, rhino, and zebras.
 - [Signature](detect/signature.md): A dataset featuring images of various documents with annotated signatures, supporting document verification and fraud detection research.
+- [Medical-pills](detect/medical-pills.md): A dataset containing labeled images of medical-pills, designed to aid in tasks like pharmaceutical quality control, sorting, and ensuring compliance with industry standards.
 
 ## [Instance Segmentation](segment/index.md)
 
@@ -70,6 +75,7 @@ Pose estimation is a technique used to determine the pose of the object relative
 - [COCO8-pose](pose/coco8-pose.md): A smaller dataset for pose estimation tasks, containing a subset of 8 COCO images with human pose annotations.
 - [Tiger-pose](pose/tiger-pose.md): A compact dataset consisting of 263 images focused on tigers, annotated with 12 keypoints per tiger for pose estimation tasks.
 - [Hand-Keypoints](pose/hand-keypoints.md): A concise dataset featuring over 26,000 images centered on human hands, annotated with 21 keypoints per hand, designed for pose estimation tasks.
+- [Dog-pose](pose/dog-pose.md): A comprehensive dataset featuring approximately 6,000 images focused on dogs, annotated with 24 keypoints per dog, tailored for pose estimation tasks.
 
 ## [Classification](classify/index.md)
 
@@ -104,6 +110,17 @@ Multi-object tracking is a computer vision technique that involves detecting and
 ## Contribute New Datasets
 
 Contributing a new dataset involves several steps to ensure that it aligns well with the existing infrastructure. Below are the necessary steps:
+
+<p align="center">
+  <br>
+  <iframe loading="lazy" width="720" height="405" src="https://www.youtube.com/embed/yMR7BgwHQ3g?start=427"
+    title="YouTube video player" frameborder="0"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+    allowfullscreen>
+  </iframe>
+  <br>
+  <strong>Watch:</strong> How to Contribute to Ultralytics Datasets 🚀
+</p>
 
 ### Steps to Contribute a New Dataset
 

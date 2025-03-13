@@ -1,4 +1,4 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 
 from itertools import product
 from pathlib import Path
@@ -116,7 +116,7 @@ def test_predict_sam():
     from ultralytics.models.sam import Predictor as SAMPredictor
 
     # Load a model
-    model = SAM(WEIGHTS_DIR / "sam_b.pt")
+    model = SAM(WEIGHTS_DIR / "sam2.1_b.pt")
 
     # Display model information (optional)
     model.info()

@@ -1,4 +1,4 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 
 import torch
 
@@ -20,15 +20,13 @@ class NASValidator(DetectionValidator):
         args (Namespace): Namespace containing various configurations for post-processing, such as confidence and IoU.
         lb (torch.Tensor): Optional tensor for multilabel NMS.
 
-    Example:
-        ```python
-        from ultralytics import NAS
+    Examples:
+        >>> from ultralytics import NAS
+        >>> model = NAS("yolo_nas_s")
+        >>> validator = model.validator
 
-        model = NAS("yolo_nas_s")
-        validator = model.validator
-        # Assumes that raw_preds are available
-        final_preds = validator.postprocess(raw_preds)
-        ```
+        Assumes that raw_preds are available
+        >>> final_preds = validator.postprocess(raw_preds)
 
     Note:
         This class is generally not instantiated directly but is used internally within the `NAS` class.
@@ -38,13 +36,7 @@ class NASValidator(DetectionValidator):
         """Apply Non-maximum suppression to prediction outputs."""
         boxes = ops.xyxy2xywh(preds_in[0][0])
         preds = torch.cat((boxes, preds_in[0][1]), -1).permute(0, 2, 1)
-        return ops.non_max_suppression(
+        return super().postprocess(
             preds,
-            self.args.conf,
-            self.args.iou,
-            labels=self.lb,
-            multi_label=False,
-            agnostic=self.args.single_cls or self.args.agnostic_nms,
-            max_det=self.args.max_det,
             max_time_img=0.5,
         )

@@ -1,4 +1,4 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 
 from copy import copy
 
@@ -21,14 +21,11 @@ class RTDETRTrainer(DetectionTrainer):
         - F.grid_sample used in RT-DETR does not support the `deterministic=True` argument.
         - AMP training can lead to NaN outputs and may produce errors during bipartite graph matching.
 
-    Example:
-        ```python
-        from ultralytics.models.rtdetr.train import RTDETRTrainer
-
-        args = dict(model="rtdetr-l.yaml", data="coco8.yaml", imgsz=640, epochs=3)
-        trainer = RTDETRTrainer(overrides=args)
-        trainer.train()
-        ```
+    Examples:
+        >>> from ultralytics.models.rtdetr.train import RTDETRTrainer
+        >>> args = dict(model="rtdetr-l.yaml", data="coco8.yaml", imgsz=640, epochs=3)
+        >>> trainer = RTDETRTrainer(overrides=args)
+        >>> trainer.train()
     """
 
     def get_model(self, cfg=None, weights=None, verbose=True):
@@ -68,8 +65,11 @@ class RTDETRTrainer(DetectionTrainer):
             hyp=self.args,
             rect=False,
             cache=self.args.cache or None,
+            single_cls=self.args.single_cls or False,
             prefix=colorstr(f"{mode}: "),
+            classes=self.args.classes,
             data=self.data,
+            fraction=self.args.fraction if mode == "train" else 1.0,
         )
 
     def get_validator(self):

@@ -1,20 +1,17 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 """
 Ultralytics modules.
 
-Example:
+Examples:
     Visualize a module with Netron.
-    ```python
-    from ultralytics.nn.modules import *
-    import torch
-    import os
-
-    x = torch.ones(1, 128, 40, 40)
-    m = Conv(128, 128)
-    f = f"{m._get_name()}.onnx"
-    torch.onnx.export(m, x, f)
-    os.system(f"onnxslim {f} {f} && open {f}")  # pip install onnxslim
-    ```
+    >>> from ultralytics.nn.modules import *
+    >>> import torch
+    >>> import os
+    >>> x = torch.ones(1, 128, 40, 40)
+    >>> m = Conv(128, 128)
+    >>> f = f"{m._get_name()}.onnx"
+    >>> torch.onnx.export(m, x, f)
+    >>> os.system(f"onnxslim {f} {f} && open {f}")  # pip install onnxslim
 """
 
 from .block import (
@@ -30,6 +27,7 @@ from .block import (
     SPP,
     SPPELAN,
     SPPF,
+    A2C2f,
     AConv,
     ADown,
     Attention,
@@ -56,6 +54,7 @@ from .block import (
     RepVGGDW,
     ResNetLayer,
     SCDown,
+    TorchVision,
 )
 from .conv import (
     CBAM,
@@ -68,6 +67,7 @@ from .conv import (
     DWConvTranspose2d,
     Focus,
     GhostConv,
+    Index,
     LightConv,
     RepConv,
     SpatialAttention,
@@ -156,4 +156,7 @@ __all__ = (
     "C2fCIB",
     "Attention",
     "PSA",
+    "TorchVision",
+    "Index",
+    "A2C2f",
 )

@@ -1,4 +1,4 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 
 import math
 import random
@@ -21,14 +21,11 @@ class DetectionTrainer(BaseTrainer):
     """
     A class extending the BaseTrainer class for training based on a detection model.
 
-    Example:
-        ```python
-        from ultralytics.models.yolo.detect import DetectionTrainer
-
-        args = dict(model="yolo11n.pt", data="coco8.yaml", epochs=3)
-        trainer = DetectionTrainer(overrides=args)
-        trainer.train()
-        ```
+    Examples:
+        >>> from ultralytics.models.yolo.detect import DetectionTrainer
+        >>> args = dict(model="yolo11n.pt", data="coco8.yaml", epochs=3)
+        >>> trainer = DetectionTrainer(overrides=args)
+        >>> trainer.train()
     """
 
     def build_dataset(self, img_path, mode="train", batch=None):
@@ -142,3 +139,10 @@ class DetectionTrainer(BaseTrainer):
         boxes = np.concatenate([lb["bboxes"] for lb in self.train_loader.dataset.labels], 0)
         cls = np.concatenate([lb["cls"] for lb in self.train_loader.dataset.labels], 0)
         plot_labels(boxes, cls.squeeze(), names=self.data["names"], save_dir=self.save_dir, on_plot=self.on_plot)
+
+    def auto_batch(self):
+        """Get batch size by calculating memory occupation of model."""
+        train_dataset = self.build_dataset(self.trainset, mode="train", batch=16)
+        # 4 for mosaic augmentation
+        max_num_obj = max(len(label["cls"]) for label in train_dataset.labels) * 4
+        return super().auto_batch(max_num_obj)

@@ -1,9 +1,9 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 """
 Train a model on a dataset.
 
 Usage:
-    $ yolo mode=train model=yolov8n.pt data=coco8.yaml imgsz=640 epochs=100 batch=16
+    $ yolo mode=train model=yolo11n.pt data=coco8.yaml imgsz=640 epochs=100 batch=16
 """
 
 import gc
@@ -52,6 +52,7 @@ from ultralytics.utils.torch_utils import (
     select_device,
     strip_optimizer,
     torch_distributed_zero_first,
+    unset_deterministic,
 )
 
 
@@ -118,7 +119,7 @@ class BaseTrainer:
         self.save_period = self.args.save_period
 
         self.batch_size = self.args.batch
-        self.epochs = self.args.epochs
+        self.epochs = self.args.epochs or 100  # in case users accidentally pass epochs=None with timed training
         self.start_epoch = 0
         if RANK == -1:
             print_args(vars(self.args))
@@ -128,7 +129,7 @@ class BaseTrainer:
             self.args.workers = 0  # faster CPU training as time dominated by inference, not dataloading
 
         # Model and Dataset
-        self.model = check_model_file_from_stem(self.args.model)  # add suffix, i.e. yolov8n -> yolov8n.pt
+        self.model = check_model_file_from_stem(self.args.model)  # add suffix, i.e. yolo11n -> yolo11n.pt
         with torch_distributed_zero_first(LOCAL_RANK):  # avoid auto-downloading dataset multiple times
             self.trainset, self.testset = self.get_dataset()
         self.ema = None
@@ -196,7 +197,7 @@ class BaseTrainer:
             # Command
             cmd, file = generate_ddp_command(world_size, self)
             try:
-                LOGGER.info(f'{colorstr("DDP:")} debug command {" ".join(cmd)}')
+                LOGGER.info(f"{colorstr('DDP:')} debug command {' '.join(cmd)}")
                 subprocess.run(cmd, check=True)
             except Exception as e:
                 raise e
@@ -292,12 +293,7 @@ class BaseTrainer:
 
         # Batch size
         if self.batch_size < 1 and RANK == -1:  # single-GPU only, estimate best batch size
-            self.args.batch = self.batch_size = check_train_batch_size(
-                model=self.model,
-                imgsz=self.args.imgsz,
-                amp=self.amp,
-                batch=self.batch_size,
-            )
+            self.args.batch = self.batch_size = self.auto_batch()
 
         # Dataloaders
         batch_size = self.batch_size // max(world_size, 1)
@@ -347,10 +343,10 @@ class BaseTrainer:
         self.train_time_start = time.time()
         self.run_callbacks("on_train_start")
         LOGGER.info(
-            f'Image sizes {self.args.imgsz} train, {self.args.imgsz} val\n'
-            f'Using {self.train_loader.num_workers * (world_size or 1)} dataloader workers\n'
+            f"Image sizes {self.args.imgsz} train, {self.args.imgsz} val\n"
+            f"Using {self.train_loader.num_workers * (world_size or 1)} dataloader workers\n"
             f"Logging results to {colorstr('bold', self.save_dir)}\n"
-            f'Starting training for ' + (f"{self.args.time} hours..." if self.args.time else f"{self.epochs} epochs...")
+            f"Starting training for " + (f"{self.args.time} hours..." if self.args.time else f"{self.epochs} epochs...")
         )
         if self.args.close_mosaic:
             base_idx = (self.epochs - self.args.close_mosaic) * nb
@@ -472,7 +468,8 @@ class BaseTrainer:
                 self.scheduler.last_epoch = self.epoch  # do not move
                 self.stop |= epoch >= self.epochs  # stop if exceeded epochs
             self.run_callbacks("on_fit_epoch_end")
-            self._clear_memory()
+            if self._get_memory(fraction=True) > 0.9:
+                self._clear_memory()  # clear if memory utilization > 90%
 
             # Early Stopping
             if RANK != -1:  # if DDP training
@@ -492,17 +489,33 @@ class BaseTrainer:
                 self.plot_metrics()
             self.run_callbacks("on_train_end")
         self._clear_memory()
+        unset_deterministic()
         self.run_callbacks("teardown")
 
-    def _get_memory(self):
-        """Get accelerator memory utilization in GB."""
+    def auto_batch(self, max_num_obj=0):
+        """Get batch size by calculating memory occupation of model."""
+        return check_train_batch_size(
+            model=self.model,
+            imgsz=self.args.imgsz,
+            amp=self.amp,
+            batch=self.batch_size,
+            max_num_obj=max_num_obj,
+        )  # returns batch size
+
+    def _get_memory(self, fraction=False):
+        """Get accelerator memory utilization in GB or fraction."""
+        memory, total = 0, 0
         if self.device.type == "mps":
             memory = torch.mps.driver_allocated_memory()
+            if fraction:
+                total = torch.mps.get_mem_info()[0]
         elif self.device.type == "cpu":
-            memory = 0
+            pass
         else:
             memory = torch.cuda.memory_reserved()
-        return memory / 1e9
+            if fraction:
+                total = torch.cuda.get_device_properties(self.device).total_memory
+        return ((memory / total) if total > 0 else 0) if fraction else (memory / 2**30)
 
     def _clear_memory(self):
         """Clear accelerator memory on different platforms."""
@@ -576,6 +589,10 @@ class BaseTrainer:
         except Exception as e:
             raise RuntimeError(emojis(f"Dataset '{clean_url(self.args.data)}' error ❌ {e}")) from e
         self.data = data
+        if self.args.single_cls:
+            LOGGER.info("Overriding class names with single class.")
+            self.data["names"] = {0: "item"}
+            self.data["nc"] = 1
         return data["train"], data.get("val") or data.get("test")
 
     def setup_model(self):
@@ -671,7 +688,7 @@ class BaseTrainer:
         n = len(metrics) + 2  # number of cols
         s = "" if self.csv.exists() else (("%s," * n % tuple(["epoch", "time"] + keys)).rstrip(",") + "\n")  # header
         t = time.time() - self.train_time_start
-        with open(self.csv, "a") as f:
+        with open(self.csv, "a", encoding="utf-8") as f:
             f.write(s + ("%.6g," * n % tuple([self.epoch + 1, t] + vals)).rstrip(",") + "\n")
 
     def plot_metrics(self):
@@ -792,7 +809,7 @@ class BaseTrainer:
                 f"ignoring 'lr0={self.args.lr0}' and 'momentum={self.args.momentum}' and "
                 f"determining best 'optimizer', 'lr0' and 'momentum' automatically... "
             )
-            nc = getattr(model, "nc", 10)  # number of classes
+            nc = self.data.get("nc", 10)  # number of classes
             lr_fit = round(0.002 * 5 / (4 + nc), 6)  # lr0 fit equation to 6 decimal places
             name, lr, momentum = ("SGD", 0.01, 0.9) if iterations > 10000 else ("AdamW", lr_fit, 0.9)
             self.args.warmup_bias_lr = 0.0  # no higher than 0.01 for Adam
@@ -807,6 +824,8 @@ class BaseTrainer:
                 else:  # weight (with decay)
                     g[0].append(param)
 
+        optimizers = {"Adam", "Adamax", "AdamW", "NAdam", "RAdam", "RMSProp", "SGD", "auto"}
+        name = {x.lower(): x for x in optimizers}.get(name.lower())
         if name in {"Adam", "Adamax", "AdamW", "NAdam", "RAdam"}:
             optimizer = getattr(optim, name, optim.Adam)(g[2], lr=lr, betas=(momentum, 0.999), weight_decay=0.0)
         elif name == "RMSProp":
@@ -815,15 +834,14 @@ class BaseTrainer:
             optimizer = optim.SGD(g[2], lr=lr, momentum=momentum, nesterov=True)
         else:
             raise NotImplementedError(
-                f"Optimizer '{name}' not found in list of available optimizers "
-                f"[Adam, AdamW, NAdam, RAdam, RMSProp, SGD, auto]."
-                "To request support for addition optimizers please visit https://github.com/ultralytics/ultralytics."
+                f"Optimizer '{name}' not found in list of available optimizers {optimizers}. "
+                "Request support for addition optimizers at https://github.com/ultralytics/ultralytics."
             )
 
         optimizer.add_param_group({"params": g[0], "weight_decay": decay})  # add g0 with weight_decay
         optimizer.add_param_group({"params": g[1], "weight_decay": 0.0})  # add g1 (BatchNorm2d weights)
         LOGGER.info(
             f"{colorstr('optimizer:')} {type(optimizer).__name__}(lr={lr}, momentum={momentum}) with parameter groups "
-            f'{len(g[1])} weight(decay=0.0), {len(g[0])} weight(decay={decay}), {len(g[2])} bias(decay=0.0)'
+            f"{len(g[1])} weight(decay=0.0), {len(g[0])} weight(decay={decay}), {len(g[2])} bias(decay=0.0)"
         )
         return optimizer

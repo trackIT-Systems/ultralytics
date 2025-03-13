@@ -1,4 +1,4 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 
 from pathlib import Path
 
@@ -12,13 +12,10 @@ class FastSAM(Model):
     """
     FastSAM model interface.
 
-    Example:
-        ```python
-        from ultralytics import FastSAM
-
-        model = FastSAM("last.pt")
-        results = model.predict("ultralytics/assets/bus.jpg")
-        ```
+    Examples:
+        >>> from ultralytics import FastSAM
+        >>> model = FastSAM("last.pt")
+        >>> results = model.predict("ultralytics/assets/bus.jpg")
     """
 
     def __init__(self, model="FastSAM-x.pt"):

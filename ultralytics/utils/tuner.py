@@ -1,13 +1,16 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 
-import subprocess
-
-from ultralytics.cfg import TASK2DATA, TASK2METRIC, get_save_dir
+from ultralytics.cfg import TASK2DATA, TASK2METRIC, get_cfg, get_save_dir
 from ultralytics.utils import DEFAULT_CFG, DEFAULT_CFG_DICT, LOGGER, NUM_THREADS, checks
 
 
 def run_ray_tune(
-    model, space: dict = None, grace_period: int = 10, gpu_per_trial: int = None, max_samples: int = 10, **train_args
+    model,
+    space: dict = None,
+    grace_period: int = 10,
+    gpu_per_trial: int = None,
+    max_samples: int = 10,
+    **train_args,
 ):
     """
     Runs hyperparameter tuning using Ray Tune.
@@ -23,23 +26,19 @@ def run_ray_tune(
     Returns:
         (dict): A dictionary containing the results of the hyperparameter search.
 
-    Example:
-        ```python
-        from ultralytics import YOLO
+    Examples:
+        >>> from ultralytics import YOLO
+        >>> model = YOLO("yolo11n.pt")  # Load a YOLO11n model
 
-        # Load a YOLOv8n model
-        model = YOLO("yolo11n.pt")
-
-        # Start tuning hyperparameters for YOLOv8n training on the COCO8 dataset
-        result_grid = model.tune(data="coco8.yaml", use_ray=True)
-        ```
+        Start tuning hyperparameters for YOLO11n training on the COCO8 dataset
+        >>> result_grid = model.tune(data="coco8.yaml", use_ray=True)
     """
     LOGGER.info("💡 Learn about RayTune at https://docs.ultralytics.com/integrations/ray-tune")
     if train_args is None:
         train_args = {}
 
     try:
-        subprocess.run("pip install ray[tune]".split(), check=True)  # do not add single quotes here
+        checks.check_requirements("ray[tune]")
 
         import ray
         from ray import tune
@@ -131,7 +130,9 @@ def run_ray_tune(
     tuner_callbacks = [WandbLoggerCallback(project="YOLOv8-tune")] if wandb else []
 
     # Create the Ray Tune hyperparameter search tuner
-    tune_dir = get_save_dir(DEFAULT_CFG, name="tune").resolve()  # must be absolute dir
+    tune_dir = get_save_dir(
+        get_cfg(DEFAULT_CFG, train_args), name=train_args.pop("name", "tune")
+    ).resolve()  # must be absolute dir
     tune_dir.mkdir(parents=True, exist_ok=True)
     tuner = tune.Tuner(
         trainable_with_resources,

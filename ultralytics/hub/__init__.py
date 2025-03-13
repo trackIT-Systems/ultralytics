@@ -1,4 +1,4 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 
 import requests
 
@@ -63,23 +63,20 @@ def login(api_key: str = None, save=True) -> bool:
         return True
     else:
         # Failed to authenticate with HUB
-        LOGGER.info(f"{PREFIX}Get API key from {api_key_url} and then run 'yolo hub login API_KEY'")
+        LOGGER.info(f"{PREFIX}Get API key from {api_key_url} and then run 'yolo login API_KEY'")
         return False
 
 
 def logout():
     """
-    Log out of Ultralytics HUB by removing the API key from the settings file. To log in again, use 'yolo hub login'.
+    Log out of Ultralytics HUB by removing the API key from the settings file. To log in again, use 'yolo login'.
 
-    Example:
-        ```python
-        from ultralytics import hub
-
-        hub.logout()
-        ```
+    Examples:
+        >>> from ultralytics import hub
+        >>> hub.logout()
     """
     SETTINGS["api_key"] = ""
-    LOGGER.info(f"{PREFIX}logged out ✅. To log in again, use 'yolo hub login'.")
+    LOGGER.info(f"{PREFIX}logged out ✅. To log in again, use 'yolo login'.")
 
 
 def reset_model(model_id=""):
@@ -129,18 +126,17 @@ def check_dataset(path: str, task: str) -> None:
         path (str): Path to data.zip (with data.yaml inside data.zip).
         task (str): Dataset task. Options are 'detect', 'segment', 'pose', 'classify', 'obb'.
 
-    Example:
+    Note:
         Download *.zip files from https://github.com/ultralytics/hub/tree/main/example_datasets
-            i.e. https://github.com/ultralytics/hub/raw/main/example_datasets/coco8.zip for coco8.zip.
-        ```python
-        from ultralytics.hub import check_dataset
+        i.e. https://github.com/ultralytics/hub/raw/main/example_datasets/coco8.zip for coco8.zip.
 
-        check_dataset("path/to/coco8.zip", task="detect")  # detect dataset
-        check_dataset("path/to/coco8-seg.zip", task="segment")  # segment dataset
-        check_dataset("path/to/coco8-pose.zip", task="pose")  # pose dataset
-        check_dataset("path/to/dota8.zip", task="obb")  # OBB dataset
-        check_dataset("path/to/imagenet10.zip", task="classify")  # classification dataset
-        ```
+    Examples:
+        >>> from ultralytics.hub import check_dataset
+        >>> check_dataset("path/to/coco8.zip", task="detect")  # detect dataset
+        >>> check_dataset("path/to/coco8-seg.zip", task="segment")  # segment dataset
+        >>> check_dataset("path/to/coco8-pose.zip", task="pose")  # pose dataset
+        >>> check_dataset("path/to/dota8.zip", task="obb")  # OBB dataset
+        >>> check_dataset("path/to/imagenet10.zip", task="classify")  # classification dataset
     """
     HUBDatasetStats(path=path, task=task).get_json()
     LOGGER.info(f"Checks completed correctly ✅. Upload this dataset to {HUB_WEB_ROOT}/datasets/.")

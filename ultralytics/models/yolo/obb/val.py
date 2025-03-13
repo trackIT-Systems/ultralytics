@@ -1,4 +1,4 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 
 from pathlib import Path
 
@@ -14,41 +14,24 @@ class OBBValidator(DetectionValidator):
     """
     A class extending the DetectionValidator class for validation based on an Oriented Bounding Box (OBB) model.
 
-    Example:
-        ```python
-        from ultralytics.models.yolo.obb import OBBValidator
-
-        args = dict(model="yolov8n-obb.pt", data="dota8.yaml")
-        validator = OBBValidator(args=args)
-        validator(model=args["model"])
-        ```
+    Examples:
+        >>> from ultralytics.models.yolo.obb import OBBValidator
+        >>> args = dict(model="yolo11n-obb.pt", data="dota8.yaml")
+        >>> validator = OBBValidator(args=args)
+        >>> validator(model=args["model"])
     """
 
     def __init__(self, dataloader=None, save_dir=None, pbar=None, args=None, _callbacks=None):
         """Initialize OBBValidator and set task to 'obb', metrics to OBBMetrics."""
         super().__init__(dataloader, save_dir, pbar, args, _callbacks)
         self.args.task = "obb"
-        self.metrics = OBBMetrics(save_dir=self.save_dir, plot=True, on_plot=self.on_plot)
+        self.metrics = OBBMetrics(save_dir=self.save_dir, plot=True)
 
     def init_metrics(self, model):
         """Initialize evaluation metrics for YOLO."""
         super().init_metrics(model)
         val = self.data.get(self.args.split, "")  # validation path
         self.is_dota = isinstance(val, str) and "DOTA" in val  # is COCO
-
-    def postprocess(self, preds):
-        """Apply Non-maximum suppression to prediction outputs."""
-        return ops.non_max_suppression(
-            preds,
-            self.args.conf,
-            self.args.iou,
-            labels=self.lb,
-            nc=self.nc,
-            multi_label=True,
-            agnostic=self.args.single_cls or self.args.agnostic_nms,
-            max_det=self.args.max_det,
-            rotated=True,
-        )
 
     def _process_batch(self, detections, gt_bboxes, gt_cls):
         """
@@ -65,13 +48,11 @@ class OBBValidator(DetectionValidator):
             (torch.Tensor): The correct prediction matrix with shape (N, 10), which includes 10 IoU (Intersection over
                 Union) levels for each detection, indicating the accuracy of predictions compared to the ground truth.
 
-        Example:
-            ```python
-            detections = torch.rand(100, 7)  # 100 sample detections
-            gt_bboxes = torch.rand(50, 5)  # 50 sample ground truth boxes
-            gt_cls = torch.randint(0, 5, (50,))  # 50 ground truth class labels
-            correct_matrix = OBBValidator._process_batch(detections, gt_bboxes, gt_cls)
-            ```
+        Examples:
+            >>> detections = torch.rand(100, 7)  # 100 sample detections
+            >>> gt_bboxes = torch.rand(50, 5)  # 50 sample ground truth boxes
+            >>> gt_cls = torch.randint(0, 5, (50,))  # 50 ground truth class labels
+            >>> correct_matrix = OBBValidator._process_batch(detections, gt_bboxes, gt_cls)
 
         Note:
             This method relies on `batch_probiou` to calculate IoU between detections and ground truth bounding boxes.
@@ -160,10 +141,10 @@ class OBBValidator(DetectionValidator):
             for d in data:
                 image_id = d["image_id"]
                 score = d["score"]
-                classname = self.names[d["category_id"]].replace(" ", "-")
+                classname = self.names[d["category_id"] - 1].replace(" ", "-")
                 p = d["poly"]
 
-                with open(f'{pred_txt / f"Task1_{classname}"}.txt', "a") as f:
+                with open(f"{pred_txt / f'Task1_{classname}'}.txt", "a", encoding="utf-8") as f:
                     f.writelines(f"{image_id} {score} {p[0]} {p[1]} {p[2]} {p[3]} {p[4]} {p[5]} {p[6]} {p[7]}\n")
             # Save merged results, this could result slightly lower map than using official merging script,
             # because of the probiou calculation.
@@ -175,7 +156,7 @@ class OBBValidator(DetectionValidator):
                 image_id = d["image_id"].split("__")[0]
                 pattern = re.compile(r"\d+___\d+")
                 x, y = (int(c) for c in re.findall(pattern, d["image_id"])[0].split("___"))
-                bbox, score, cls = d["rbox"], d["score"], d["category_id"]
+                bbox, score, cls = d["rbox"], d["score"], d["category_id"] - 1
                 bbox[0] += x
                 bbox[1] += y
                 bbox.extend([score, cls])
@@ -197,7 +178,7 @@ class OBBValidator(DetectionValidator):
                     p = [round(i, 3) for i in x[:-2]]  # poly
                     score = round(x[-2], 3)
 
-                    with open(f'{pred_merged_txt / f"Task1_{classname}"}.txt', "a") as f:
+                    with open(f"{pred_merged_txt / f'Task1_{classname}'}.txt", "a", encoding="utf-8") as f:
                         f.writelines(f"{image_id} {score} {p[0]} {p[1]} {p[2]} {p[3]} {p[4]} {p[5]} {p[6]} {p[7]}\n")
 
         return stats

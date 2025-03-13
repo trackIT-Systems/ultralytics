@@ -1,4 +1,4 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 
 import torch
 
@@ -16,15 +16,12 @@ class RTDETRPredictor(BasePredictor):
     This class leverages the power of Vision Transformers to provide real-time object detection while maintaining
     high accuracy. It supports key features like efficient hybrid encoding and IoU-aware query selection.
 
-    Example:
-        ```python
-        from ultralytics.utils import ASSETS
-        from ultralytics.models.rtdetr import RTDETRPredictor
-
-        args = dict(model="rtdetr-l.pt", source=ASSETS)
-        predictor = RTDETRPredictor(overrides=args)
-        predictor.predict_cli()
-        ```
+    Examples:
+        >>> from ultralytics.utils import ASSETS
+        >>> from ultralytics.models.rtdetr import RTDETRPredictor
+        >>> args = dict(model="rtdetr-l.pt", source=ASSETS)
+        >>> predictor = RTDETRPredictor(overrides=args)
+        >>> predictor.predict_cli()
 
     Attributes:
         imgsz (int): Image size for inference (must be square and scale-filled).
@@ -72,7 +69,7 @@ class RTDETRPredictor(BasePredictor):
     def pre_transform(self, im):
         """
         Pre-transforms the input images before feeding them into the model for inference. The input images are
-        letterboxed to ensure a square aspect ratio and scale-filled. The size must be square(640) and scaleFilled.
+        letterboxed to ensure a square aspect ratio and scale-filled. The size must be square(640) and scale_filled.
 
         Args:
             im (list[np.ndarray] |torch.Tensor): Input images of shape (N,3,h,w) for tensor, [(h,w,3) x N] for list.
@@ -80,5 +77,5 @@ class RTDETRPredictor(BasePredictor):
         Returns:
             (list): List of pre-transformed images ready for model inference.
         """
-        letterbox = LetterBox(self.imgsz, auto=False, scaleFill=True)
+        letterbox = LetterBox(self.imgsz, auto=False, scale_fill=True)
         return [letterbox(image=x) for x in im]

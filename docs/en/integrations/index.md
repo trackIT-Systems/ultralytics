@@ -57,6 +57,10 @@ Welcome to the Ultralytics Integrations page! This page provides an overview of 
 
 - [Weights & Biases (W&B)](weights-biases.md): Monitor experiments, visualize metrics, and foster reproducibility and collaboration on Ultralytics projects.
 
+- [VS Code](vscode.md): An extension for VS Code that provides code snippets for accelerating development workflows with Ultralytics and also for anyone looking for examples to help learn or get started with Ultralytics.
+
+- [Albumentations](albumentations.md): Enhance your Ultralytics models with powerful image augmentations to improve model robustness and generalization.
+
 ## Deployment Integrations
 
 - [CoreML](coreml.md): CoreML, developed by [Apple](https://www.apple.com/), is a framework designed for efficiently integrating machine learning models into applications across iOS, macOS, watchOS, and tvOS, using Apple's hardware for effective and secure [model deployment](https://www.ultralytics.com/glossary/model-deployment).
@@ -64,6 +68,8 @@ Welcome to the Ultralytics Integrations page! This page provides an overview of 
 - [Gradio](gradio.md) 🚀 NEW: Deploy Ultralytics models with Gradio for real-time, interactive object detection demos.
 
 - [NCNN](ncnn.md): Developed by [Tencent](http://www.tencent.com/), NCNN is an efficient [neural network](https://www.ultralytics.com/glossary/neural-network-nn) inference framework tailored for mobile devices. It enables direct deployment of AI models into apps, optimizing performance across various mobile platforms.
+
+- [MNN](mnn.md): Developed by [Alibaba](https://www.alibabagroup.com/), MNN is a highly efficient and lightweight deep learning framework. It supports inference and training of deep learning models and has industry-leading performance for inference and training on-device.
 
 - [Neural Magic](neural-magic.md): Leverage Quantization Aware Training (QAT) and pruning techniques to optimize Ultralytics models for superior performance and leaner size.
 
@@ -87,7 +93,11 @@ Welcome to the Ultralytics Integrations page! This page provides an overview of 
 
 - [TorchScript](torchscript.md): Developed as part of the [PyTorch](https://pytorch.org/) framework, TorchScript enables efficient execution and deployment of machine learning models in various production environments without the need for Python dependencies.
 
-- [VS Code](vscode.md): An extension for VS Code that provides code snippets for accelerating development workflows with Ultralytics and also for anyone looking for examples to help learn or get started with Ultralytics.
+- [SONY IMX500](sony-imx500.md): Optimize and deploy [Ultralytics YOLOv8](https://docs.ultralytics.com/models/yolov8/) models on Raspberry Pi AI Cameras with the IMX500 sensor for fast, low-power performance.
+
+- [Rockchip RKNN](rockchip-rknn.md): Developed by [Rockchip](https://www.rock-chips.com/), RKNN is a specialized neural network inference framework optimized for Rockchip's hardware platforms, particularly their NPUs. It facilitates efficient deployment of AI models on edge devices, enabling high-performance inference in real-time applications.
+
+- [Seeed Studio reCamera](seeedstudio-recamera.md): Developed by [Seeed Studio](https://www.seeedstudio.com/), the reCamera is a cutting-edge edge AI device designed for real-time computer vision applications. Powered by the RISC-V-based SG200X processor, it delivers high-performance AI inference with energy efficiency. Its modular design, advanced video processing capabilities, and support for flexible deployment make it an ideal choice for various use cases, including safety monitoring, environmental applications, and manufacturing.
 
 ### Export Formats
 

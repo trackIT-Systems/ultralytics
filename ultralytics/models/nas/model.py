@@ -1,14 +1,11 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 """
 YOLO-NAS model interface.
 
-Example:
-    ```python
-    from ultralytics import NAS
-
-    model = NAS("yolo_nas_s")
-    results = model.predict("ultralytics/assets/bus.jpg")
-    ```
+Examples:
+    >>> from ultralytics import NAS
+    >>> model = NAS("yolo_nas_s")
+    >>> results = model.predict("ultralytics/assets/bus.jpg")
 """
 
 from pathlib import Path
@@ -16,6 +13,7 @@ from pathlib import Path
 import torch
 
 from ultralytics.engine.model import Model
+from ultralytics.utils import DEFAULT_CFG_DICT
 from ultralytics.utils.downloads import attempt_download_asset
 from ultralytics.utils.torch_utils import model_info
 
@@ -30,13 +28,10 @@ class NAS(Model):
     This class provides an interface for the YOLO-NAS models and extends the `Model` class from Ultralytics engine.
     It is designed to facilitate the task of object detection using pre-trained or custom-trained YOLO-NAS models.
 
-    Example:
-        ```python
-        from ultralytics import NAS
-
-        model = NAS("yolo_nas_s")
-        results = model.predict("ultralytics/assets/bus.jpg")
-        ```
+    Examples:
+        >>> from ultralytics import NAS
+        >>> model = NAS("yolo_nas_s")
+        >>> results = model.predict("ultralytics/assets/bus.jpg")
 
     Attributes:
         model (str): Path to the pre-trained model or model name. Defaults to 'yolo_nas_s.pt'.
@@ -77,6 +72,7 @@ class NAS(Model):
         self.model.yaml = {}  # for info()
         self.model.pt_path = weights  # for export()
         self.model.task = "detect"  # for export()
+        self.model.args = {**DEFAULT_CFG_DICT, **self.overrides}  # for export()
 
     def info(self, detailed=False, verbose=True):
         """

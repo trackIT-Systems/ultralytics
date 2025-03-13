@@ -1,4 +1,4 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 
 from pathlib import Path
 
@@ -16,14 +16,11 @@ class PoseValidator(DetectionValidator):
     """
     A class extending the DetectionValidator class for validation based on a pose model.
 
-    Example:
-        ```python
-        from ultralytics.models.yolo.pose import PoseValidator
-
-        args = dict(model="yolov8n-pose.pt", data="coco8-pose.yaml")
-        validator = PoseValidator(args=args)
-        validator()
-        ```
+    Examples:
+        >>> from ultralytics.models.yolo.pose import PoseValidator
+        >>> args = dict(model="yolo11n-pose.pt", data="coco8-pose.yaml")
+        >>> validator = PoseValidator(args=args)
+        >>> validator()
     """
 
     def __init__(self, dataloader=None, save_dir=None, pbar=None, args=None, _callbacks=None):
@@ -32,7 +29,7 @@ class PoseValidator(DetectionValidator):
         self.sigma = None
         self.kpt_shape = None
         self.args.task = "pose"
-        self.metrics = PoseMetrics(save_dir=self.save_dir, on_plot=self.on_plot)
+        self.metrics = PoseMetrics(save_dir=self.save_dir)
         if isinstance(self.args.device, str) and self.args.device.lower() == "mps":
             LOGGER.warning(
                 "WARNING ⚠️ Apple MPS known Pose bug. Recommend 'device=cpu' for Pose models. "
@@ -59,19 +56,6 @@ class PoseValidator(DetectionValidator):
             "R",
             "mAP50",
             "mAP50-95)",
-        )
-
-    def postprocess(self, preds):
-        """Apply non-maximum suppression and return detections with high confidence scores."""
-        return ops.non_max_suppression(
-            preds,
-            self.args.conf,
-            self.args.iou,
-            labels=self.lb,
-            multi_label=True,
-            agnostic=self.args.single_cls or self.args.agnostic_nms,
-            max_det=self.args.max_det,
-            nc=self.nc,
         )
 
     def init_metrics(self, model):
@@ -138,8 +122,8 @@ class PoseValidator(DetectionValidator):
             if nl:
                 stat["tp"] = self._process_batch(predn, bbox, cls)
                 stat["tp_p"] = self._process_batch(predn, bbox, cls, pred_kpts, pbatch["kpts"])
-                if self.args.plots:
-                    self.confusion_matrix.process_batch(predn, bbox, cls)
+            if self.args.plots:
+                self.confusion_matrix.process_batch(predn, bbox, cls)
 
             for k in self.stats.keys():
                 self.stats[k].append(stat[k])
@@ -153,7 +137,7 @@ class PoseValidator(DetectionValidator):
                     pred_kpts,
                     self.args.save_conf,
                     pbatch["ori_shape"],
-                    self.save_dir / "labels" / f'{Path(batch["im_file"][si]).stem}.txt',
+                    self.save_dir / "labels" / f"{Path(batch['im_file'][si]).stem}.txt",
                 )
 
     def _process_batch(self, detections, gt_bboxes, gt_cls, pred_kpts=None, gt_kpts=None):
@@ -171,18 +155,16 @@ class PoseValidator(DetectionValidator):
             gt_kpts (torch.Tensor | None): Optional tensor with shape (N, 51) representing ground truth keypoints.
 
         Returns:
-            torch.Tensor: A tensor with shape (N, 10) representing the correct prediction matrix for 10 IoU levels,
+            (torch.Tensor): A tensor with shape (N, 10) representing the correct prediction matrix for 10 IoU levels,
                 where N is the number of detections.
 
-        Example:
-            ```python
-            detections = torch.rand(100, 6)  # 100 predictions: (x1, y1, x2, y2, conf, class)
-            gt_bboxes = torch.rand(50, 4)  # 50 ground truth boxes: (x1, y1, x2, y2)
-            gt_cls = torch.randint(0, 2, (50,))  # 50 ground truth class indices
-            pred_kpts = torch.rand(100, 51)  # 100 predicted keypoints
-            gt_kpts = torch.rand(50, 51)  # 50 ground truth keypoints
-            correct_preds = _process_batch(detections, gt_bboxes, gt_cls, pred_kpts, gt_kpts)
-            ```
+        Examples:
+            >>> detections = torch.rand(100, 6)  # 100 predictions: (x1, y1, x2, y2, conf, class)
+            >>> gt_bboxes = torch.rand(50, 4)  # 50 ground truth boxes: (x1, y1, x2, y2)
+            >>> gt_cls = torch.randint(0, 2, (50,))  # 50 ground truth class indices
+            >>> pred_kpts = torch.rand(100, 51)  # 100 predicted keypoints
+            >>> gt_kpts = torch.rand(50, 51)  # 50 ground truth keypoints
+            >>> correct_preds = _process_batch(detections, gt_bboxes, gt_cls, pred_kpts, gt_kpts)
 
         Note:
             `0.53` scale factor used in area computation is referenced from https://github.com/jin-s13/xtcocoapi/blob/master/xtcocotools/cocoeval.py#L384.

@@ -1,4 +1,4 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 
 from copy import copy
 
@@ -20,14 +20,11 @@ class ClassificationTrainer(BaseTrainer):
     Notes:
         - Torchvision classification models can also be passed to the 'model' argument, i.e. model='resnet18'.
 
-    Example:
-        ```python
-        from ultralytics.models.yolo.classify import ClassificationTrainer
-
-        args = dict(model="yolov8n-cls.pt", data="imagenet10", epochs=3)
-        trainer = ClassificationTrainer(overrides=args)
-        trainer.train()
-        ```
+    Examples:
+        >>> from ultralytics.models.yolo.classify import ClassificationTrainer
+        >>> args = dict(model="yolo11n-cls.pt", data="imagenet10", epochs=3)
+        >>> trainer = ClassificationTrainer(overrides=args)
+        >>> trainer.train()
     """
 
     def __init__(self, cfg=DEFAULT_CFG, overrides=None, _callbacks=None):
