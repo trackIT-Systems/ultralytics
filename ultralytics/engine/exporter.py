@@ -61,6 +61,7 @@ import os
 import shutil
 import subprocess
 import time
+from types import SimpleNamespace
 import warnings
 from contextlib import contextmanager
 from copy import deepcopy
@@ -222,8 +223,8 @@ class Exporter:
             overrides (dict, optional): Configuration overrides. Defaults to None.
             _callbacks (dict, optional): Dictionary of callback functions. Defaults to None.
         """
-        self.args = get_cfg(cfg, overrides)
-        self.output_path = f'/yolobat-train/var/model_export/{self.args.version}/{self.args.version}_{self.args.release}'
+        self.args: SimpleNamespace = get_cfg(cfg, overrides)
+        self.output_path: str = f'/yolobat-train/var/model_export/yolobat/{self.args.version}/{self.args.version}_{self.args.release}'
         os.makedirs(self.output_path, exist_ok=True)
 
         if self.args.format.lower() in {"coreml", "mlmodel"}:  # fix attempt for protobuf<3.20.x errors
