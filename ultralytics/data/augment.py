@@ -1874,7 +1874,7 @@ class Albumentations:
                     mask_y_length=hyp.xy_mask_y_length,  # ScaleIntType
                     p=hyp.xy_masking,  # float
                 ),
-                A.PixelDropout(dropout_prob=hyp.pd_dropout_prob, p=hyp.pixel_dropout),
+                A.PixelDropout(dropout_prob=hyp.pd_dropout_prob, per_channel=True, p=hyp.pixel_dropout),
             ]
             # Compose transforms
             self.contains_spatial = any(transform.__class__.__name__ in spatial_transforms for transform in T)
