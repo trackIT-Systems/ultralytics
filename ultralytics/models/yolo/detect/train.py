@@ -6,7 +6,6 @@ from copy import copy
 
 import numpy as np
 import torch.nn as nn
-from validator.Validator import CustomValidator
 
 from ultralytics.data import build_dataloader, build_yolo_dataset
 from ultralytics.engine.trainer import BaseTrainer

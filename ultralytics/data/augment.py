@@ -10,6 +10,7 @@ import numpy as np
 import torch
 from PIL import Image
 
+from types import SimpleNamespace
 from ultralytics.data.utils import polygons2masks, polygons2masks_overlap
 from ultralytics.utils import LOGGER, colorstr
 from ultralytics.utils.checks import check_version
@@ -1761,7 +1762,7 @@ class Albumentations:
         - Spatial transforms are handled differently and require special processing for bounding boxes.
     """
 
-    def __init__(self, hyp: dict=None, p=1.0):
+    def __init__(self, hyp: SimpleNamespace=None, p=1.0): # type: ignore
         """
         Initialize the Albumentations transform object for YOLO bbox formatted parameters.
 
