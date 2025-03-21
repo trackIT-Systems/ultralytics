@@ -453,18 +453,23 @@ def smooth(y, f=0.05):
 
 
 @plt_settings()
-def plot_pr_curve(px, py, ap, save_dir=Path("pr_curve.png"), names={}, on_plot=None):
+def plot_pr_curve(px, py, ap, save_dir=Path("pr_curve.png"), names={}, on_plot=None, plot_settings={}):
     """Plots a precision-recall curve."""
     fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True)
     py = np.stack(py, axis=1)
 
-    if 0 < len(names) < 21:  # display per-class legend if < 21 classes
-        for i, y in enumerate(py.T):
-            ax.plot(px, y, linewidth=1, label=f"{names[i]} {ap[i, 0]:.3f}")  # plot(recall, precision)
-    else:
-        ax.plot(px, py, linewidth=1, color="grey")  # plot(recall, precision)
+    # if 0 < len(names) < 21:  # display per-class legend if < 21 classes
+    #     for i, y in enumerate(py.T):
+    #         ax.plot(px, y, linewidth=1, label=f"{names[i]} {ap[i, 0]:.3f}")  # plot(recall, precision)
+    # else:
+    #     ax.plot(px, py, linewidth=1, color="grey")  # plot(recall, precision)
+    
+    # cm= plt.get_cmap('gist_rainbow')
+    # ax.set_prop_cycle(color=[cm(1.*i/len(py.T)) for i in range(len(py.T))])
+    for i, y in enumerate(py.T):
+        ax.plot(px, y, linewidth=1, linestyle=plot_settings[i]['line_style'], color=plot_settings[i]['color'], label=f"{names[i]} {ap[i, 0]:.3f}") 
 
-    ax.plot(px, py.mean(1), linewidth=3, color="blue", label=f"all classes {ap[:, 0].mean():.3f} mAP@0.5")
+    ax.plot(px, py.mean(1), color="black", label=f"all classes {ap[:, 0].mean():.3f} mAP@0.5")
     ax.set_xlabel("Recall")
     ax.set_ylabel("Precision")
     ax.set_xlim(0, 1)
@@ -478,18 +483,23 @@ def plot_pr_curve(px, py, ap, save_dir=Path("pr_curve.png"), names={}, on_plot=N
 
 
 @plt_settings()
-def plot_mc_curve(px, py, save_dir=Path("mc_curve.png"), names={}, xlabel="Confidence", ylabel="Metric", on_plot=None):
+def plot_mc_curve(px, py, save_dir=Path("mc_curve.png"), names={}, xlabel="Confidence", ylabel="Metric", on_plot=None, plot_settings={}):
     """Plots a metric-confidence curve."""
     fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True)
 
-    if 0 < len(names) < 21:  # display per-class legend if < 21 classes
-        for i, y in enumerate(py):
-            ax.plot(px, y, linewidth=1, label=f"{names[i]}")  # plot(confidence, metric)
-    else:
-        ax.plot(px, py.T, linewidth=1, color="grey")  # plot(confidence, metric)
+    # if 0 < len(names) < 21:  # display per-class legend if < 21 classes
+    #     for i, y in enumerate(py):
+    #         ax.plot(px, y, linewidth=1, label=f"{names[i]}")  # plot(confidence, metric)
+    # else:
+    #     ax.plot(px, py.T, linewidth=1, color="grey")  # plot(confidence, metric)
+
+    # cm= plt.get_cmap('gist_rainbow')
+    # ax.set_prop_cycle(color=[cm(1.*i/len(py)) for i in range(len(py))])
+    for i, y in enumerate(py):
+        ax.plot(px, y, linewidth=1, linestyle=plot_settings[i]['line_style'], color=plot_settings[i]['color'], label=f"{names[i]}")
 
     y = smooth(py.mean(0), 0.05)
-    ax.plot(px, y, linewidth=3, color="blue", label=f"all classes {y.max():.2f} at {px[y.argmax()]:.3f}")
+    ax.plot(px, y, color="black", label=f"all classes {y.max():.2f} at {px[y.argmax()]:.3f}")
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
     ax.set_xlim(0, 1)
@@ -535,7 +545,7 @@ def compute_ap(recall, precision):
 
 
 def ap_per_class(
-    tp, conf, pred_cls, target_cls, plot=False, on_plot=None, save_dir=Path(), names={}, eps=1e-16, prefix=""
+    tp, conf, pred_cls, target_cls, plot=False, on_plot=None, save_dir=Path(), names={}, eps=1e-16, prefix="", plot_settings=None
 ):
     """
     Computes the average precision per class for object detection evaluation.
@@ -611,10 +621,10 @@ def ap_per_class(
     names = [v for k, v in names.items() if k in unique_classes]  # list: only classes that have data
     names = dict(enumerate(names))  # to dict
     if plot:
-        plot_pr_curve(x, prec_values, ap, save_dir / f"{prefix}PR_curve.png", names, on_plot=on_plot)
-        plot_mc_curve(x, f1_curve, save_dir / f"{prefix}F1_curve.png", names, ylabel="F1", on_plot=on_plot)
-        plot_mc_curve(x, p_curve, save_dir / f"{prefix}P_curve.png", names, ylabel="Precision", on_plot=on_plot)
-        plot_mc_curve(x, r_curve, save_dir / f"{prefix}R_curve.png", names, ylabel="Recall", on_plot=on_plot)
+        plot_pr_curve(x, prec_values, ap, save_dir / f"{prefix}PR_curve.png", names, on_plot=on_plot, plot_settings=plot_settings)
+        plot_mc_curve(x, f1_curve, save_dir / f"{prefix}F1_curve.png", names, ylabel="F1", on_plot=on_plot, plot_settings=plot_settings)
+        plot_mc_curve(x, p_curve, save_dir / f"{prefix}P_curve.png", names, ylabel="Precision", on_plot=on_plot, plot_settings=plot_settings)
+        plot_mc_curve(x, r_curve, save_dir / f"{prefix}R_curve.png", names, ylabel="Recall", on_plot=on_plot, plot_settings=plot_settings)
 
     i = smooth(f1_curve.mean(0), 0.1).argmax()  # max F1 index
     p, r, f1 = p_curve[:, i], r_curve[:, i], f1_curve[:, i]  # max-F1 precision, recall, F1 values
@@ -833,6 +843,7 @@ class DetMetrics(SimpleClass):
         self.box = Metric()
         self.speed = {"preprocess": 0.0, "inference": 0.0, "loss": 0.0, "postprocess": 0.0}
         self.task = "detect"
+        self.plot_settings = None
 
     def process(self, tp, conf, pred_cls, target_cls, on_plot=None):
         """Process predicted results for object detection and update metrics."""
@@ -845,6 +856,7 @@ class DetMetrics(SimpleClass):
             save_dir=self.save_dir,
             names=self.names,
             on_plot=on_plot,
+            plot_settings=self.plot_settings
         )[2:]
         self.box.nc = len(self.names)
         self.box.update(results)
