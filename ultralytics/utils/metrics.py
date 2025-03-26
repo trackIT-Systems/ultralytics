@@ -520,7 +520,7 @@ def plot_per_class_curves(save_dir, names={}, on_plot=None, plot_settings={}):
     import pandas as pd
     from scipy.ndimage import gaussian_filter1d
     df = pd.read_csv(class_metrics)
-    for metric in ['Precision', 'Recall', 'mAP50', 'mAP50_95']:
+    for metric in ['Precision', 'Recall', 'mAP50', 'mAP50_95', 'F1']:
         fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True) 
         for i, y in names.items():
             col = f"{y}_{metric}"
@@ -774,7 +774,7 @@ class Metric(SimpleClass):
 
     def class_result(self, i):
         """Class-aware result, return p[i], r[i], ap50[i], ap[i]."""
-        return self.p[i], self.r[i], self.ap50[i], self.ap[i]
+        return self.p[i], self.r[i], self.ap50[i], self.ap[i], self.f1[i]
 
     @property
     def maps(self):
