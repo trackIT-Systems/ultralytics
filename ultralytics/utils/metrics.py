@@ -511,6 +511,34 @@ def plot_mc_curve(px, py, save_dir=Path("mc_curve.png"), names={}, xlabel="Confi
     if on_plot:
         on_plot(save_dir)
 
+def plot_per_class_curves(save_dir, names={}, on_plot=None, plot_settings={}):
+    """Plots a metrics per class."""
+    class_metrics = save_dir.joinpath("class_metrics.csv")
+    if not class_metrics.exists():
+        return
+    
+    import pandas as pd
+    from scipy.ndimage import gaussian_filter1d
+    df = pd.read_csv(class_metrics)
+    for metric in ['Precision', 'Recall', 'mAP50', 'mAP50_95']:
+        fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True) 
+        for i, y in names.items():
+            col = f"{y}_{metric}"
+            ax.plot(df['epoch'], df[col], linewidth=1, linestyle=plot_settings[i]['line_style'], color=plot_settings[i]['color'], label=f"{names[i]}") #gaussian_filter1d(df[col], sigma=3)
+
+        #y = smooth(py.mean(0), 0.05)
+        #ax.plot(px, y, color="black", label=f"all classes {y.max():.2f} at {px[y.argmax()]:.3f}")
+        ax.set_xlabel('Epoch')
+        ax.set_ylabel(metric)
+        #ax.set_ylim(0, 1)
+        ax.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+        ax.set_title(f"{metric} per Class")
+        save_path = save_dir.joinpath(f"{metric}_per_class.png")
+        fig.savefig(save_path, dpi=250)
+        plt.close(fig)
+        if on_plot:
+            on_plot(save_path)
+
 
 def compute_ap(recall, precision):
     """
@@ -625,6 +653,7 @@ def ap_per_class(
         plot_mc_curve(x, f1_curve, save_dir / f"{prefix}F1_curve.png", names, ylabel="F1", on_plot=on_plot, plot_settings=plot_settings)
         plot_mc_curve(x, p_curve, save_dir / f"{prefix}P_curve.png", names, ylabel="Precision", on_plot=on_plot, plot_settings=plot_settings)
         plot_mc_curve(x, r_curve, save_dir / f"{prefix}R_curve.png", names, ylabel="Recall", on_plot=on_plot, plot_settings=plot_settings)
+        plot_per_class_curves(save_dir=save_dir, names=names, on_plot=on_plot, plot_settings=plot_settings)
 
     i = smooth(f1_curve.mean(0), 0.1).argmax()  # max F1 index
     p, r, f1 = p_curve[:, i], r_curve[:, i], f1_curve[:, i]  # max-F1 precision, recall, F1 values
