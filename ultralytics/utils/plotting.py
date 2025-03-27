@@ -170,7 +170,7 @@ class Annotator:
 
     Examples:
         >>> from ultralytics.utils.plotting import Annotator
-        >>> im0 = cv2.imread("test.png")
+        >>> im0 = cv2.imread("test.svg")
         >>> annotator = Annotator(im0, line_width=10)
     """
 
@@ -260,7 +260,7 @@ class Annotator:
 
         Examples:
             >>> from ultralytics.utils.plotting import Annotator
-            >>> im0 = cv2.imread("test.png")
+            >>> im0 = cv2.imread("test.svg")
             >>> annotator = Annotator(im0, line_width=10)
             >>> annotator.get_txt_color(color=(104, 31, 17))  # return (255, 255, 255)
         """
@@ -284,7 +284,7 @@ class Annotator:
 
         Examples:
             >>> from ultralytics.utils.plotting import Annotator
-            >>> im0 = cv2.imread("test.png")
+            >>> im0 = cv2.imread("test.svg")
             >>> annotator = Annotator(im0, line_width=10)
             >>> annotator.box_label(box=[10, 20, 30, 40], label="person")
         """
@@ -504,7 +504,7 @@ class Annotator:
 
         Examples:
             >>> from ultralytics.utils.plotting import Annotator
-            >>> im0 = cv2.imread("test.png")
+            >>> im0 = cv2.imread("test.svg")
             >>> annotator = Annotator(im0, line_width=10)
             >>> annotator.get_bbox_dimension(bbox=[10, 20, 30, 40])
         """
@@ -786,7 +786,7 @@ def plot_images(
 def plot_results(file="path/to/results.csv", dir="", segment=False, pose=False, classify=False, on_plot=None):
     """
     Plot training results from a results CSV file. The function supports various types of data including segmentation,
-    pose estimation, and classification. Plots are saved as 'results.png' in the directory where the CSV is located.
+    pose estimation, and classification. Plots are saved as 'results.svg' in the directory where the CSV is located.
 
     Args:
         file (str, optional): Path to the CSV file containing the training results. Defaults to 'path/to/results.csv'.
@@ -836,7 +836,7 @@ def plot_results(file="path/to/results.csv", dir="", segment=False, pose=False, 
         except Exception as e:
             LOGGER.warning(f"WARNING: Plotting error for {f}: {e}")
     ax[1].legend()
-    fname = save_dir / "results.png"
+    fname = save_dir / "results.svg"
     fig.savefig(fname, dpi=200)
     plt.close()
     if on_plot:
@@ -914,7 +914,7 @@ def plot_tune_results(csv_file="tune_results.csv"):
         plt.tick_params(axis="both", labelsize=8)  # Set axis label size to 8
         if i % n != 0:
             plt.yticks([])
-    _save_one_file(csv_file.with_name("tune_scatter_plots.png"))
+    _save_one_file(csv_file.with_name("tune_scatter_plots.svg"))
 
     # Fitness vs iteration
     x = range(1, len(fitness) + 1)
@@ -926,7 +926,7 @@ def plot_tune_results(csv_file="tune_results.csv"):
     plt.ylabel("Fitness")
     plt.grid(True)
     plt.legend()
-    _save_one_file(csv_file.with_name("tune_fitness.png"))
+    _save_one_file(csv_file.with_name("tune_fitness.svg"))
 
 
 def output_to_target(output, max_det=300):
@@ -968,7 +968,7 @@ def feature_visualization(x, module_type, stage, n=32, save_dir=Path("runs/detec
     if isinstance(x, torch.Tensor):
         _, channels, height, width = x.shape  # batch, channels, height, width
         if height > 1 and width > 1:
-            f = save_dir / f"stage{stage}_{module_type.split('.')[-1]}_features.png"  # filename
+            f = save_dir / f"stage{stage}_{module_type.split('.')[-1]}_features.svg"  # filename
 
             blocks = torch.chunk(x[0].cpu(), channels, dim=0)  # select batch index 0, block by channels
             n = min(n, channels)  # number of plots

@@ -5,6 +5,7 @@ import math
 import warnings
 from pathlib import Path
 
+from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -394,7 +395,7 @@ class ConfusionMatrix:
 
     @TryExcept("WARNING ⚠️ ConfusionMatrix plot failure")
     @plt_settings()
-    def plot(self, normalize=True, save_dir="", names=(), on_plot=None):
+    def plot(self, normalize=True, save_dir=Path(), names=(), on_plot=None, save=True):
         """
         Plot the confusion matrix using seaborn and save it to a file.
 
@@ -431,12 +432,16 @@ class ConfusionMatrix:
         title = "Confusion Matrix" + " Normalized" * normalize
         ax.set_xlabel("True")
         ax.set_ylabel("Predicted")
+        prefix = 'test_' if save_dir.stem == 'validation' else 'val_'
+        plot_prefix = 'Test ' if prefix == 'test_' else 'Validation '
+        title = "Epoch " + title if not save else plot_prefix + title
         ax.set_title(title)
-        plot_fname = Path(save_dir) / f"{title.lower().replace(' ', '_')}.png"
+        plot_fname = Path(save_dir) / f"{title.lower().replace(' ', '_')}.svg" #.png"
         fig.savefig(plot_fname, dpi=250)
         plt.close(fig)
         if on_plot:
             on_plot(plot_fname)
+        return fig
 
     def print(self):
         """Print the confusion matrix to the console."""
@@ -453,7 +458,7 @@ def smooth(y, f=0.05):
 
 
 @plt_settings()
-def plot_pr_curve(px, py, ap, save_dir=Path("pr_curve.png"), names={}, on_plot=None, plot_settings={}):
+def plot_pr_curve(px, py, ap, save_dir=Path("pr_curve.svg"), names={}, on_plot=None, plot_settings={}, prefix=""):
     """Plots a precision-recall curve."""
     fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True)
     py = np.stack(py, axis=1)
@@ -475,15 +480,16 @@ def plot_pr_curve(px, py, ap, save_dir=Path("pr_curve.png"), names={}, on_plot=N
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-    ax.set_title("Precision-Recall Curve")
+    ax.set_title(f"{prefix}Precision-Recall Curve")
     fig.savefig(save_dir, dpi=250)
     plt.close(fig)
     if on_plot:
         on_plot(save_dir)
+    return fig
 
 
 @plt_settings()
-def plot_mc_curve(px, py, save_dir=Path("mc_curve.png"), names={}, xlabel="Confidence", ylabel="Metric", on_plot=None, plot_settings={}):
+def plot_mc_curve(px, py, save_dir=Path("mc_curve.svg"), names={}, xlabel="Confidence", ylabel="Metric", on_plot=None, plot_settings={}, prefix=""):
     """Plots a metric-confidence curve."""
     fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True)
 
@@ -505,22 +511,24 @@ def plot_mc_curve(px, py, save_dir=Path("mc_curve.png"), names={}, xlabel="Confi
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-    ax.set_title(f"{ylabel}-Confidence Curve")
+    ax.set_title(f"{prefix}{ylabel}-Confidence Curve")
     fig.savefig(save_dir, dpi=250)
     plt.close(fig)
     if on_plot:
         on_plot(save_dir)
+    return fig
 
-def plot_per_class_curves(save_dir, names={}, on_plot=None, plot_settings={}):
-    """Plots a metrics per class."""
+def plot_per_class_curves(save_dir, names={}, on_plot=None, plot_settings={}, prefix=""):
+    """Plots metrics per class."""
+    figures: list[Figure] = []
     class_metrics = save_dir.joinpath("class_metrics.csv")
     if not class_metrics.exists():
-        return
+        return figures
     
     import pandas as pd
     from scipy.ndimage import gaussian_filter1d
     df = pd.read_csv(class_metrics)
-    for metric in ['Precision', 'Recall', 'mAP50', 'mAP50_95', 'F1']:
+    for metric in ['Precision', 'Recall', 'mAP50', 'mAP50:95', 'F1']:
         fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True) 
         for i, y in names.items():
             col = f"{y}_{metric}"
@@ -532,12 +540,14 @@ def plot_per_class_curves(save_dir, names={}, on_plot=None, plot_settings={}):
         ax.set_ylabel(metric)
         #ax.set_ylim(0, 1)
         ax.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-        ax.set_title(f"{metric} per Class")
-        save_path = save_dir.joinpath(f"{metric}_per_class.png")
+        ax.set_title(f"{prefix}Epoch {metric} per Class")
+        save_path = save_dir.joinpath(f"{metric}_per_class.svg")
         fig.savefig(save_path, dpi=250)
         plt.close(fig)
+        figures.append(fig)
         if on_plot:
             on_plot(save_path)
+        return figures
 
 
 def compute_ap(recall, precision):
@@ -589,6 +599,7 @@ def ap_per_class(
         names (dict, optional): Dict of class names to plot PR curves. Defaults to an empty tuple.
         eps (float, optional): A small value to avoid division by zero. Defaults to 1e-16.
         prefix (str, optional): A prefix string for saving the plot files. Defaults to an empty string.
+        plot_settings (dict, optional): A dictionary containing plot settings like colors and line style. Defaults to None.
 
     Returns:
         tp (np.ndarray): True positive counts at threshold given by max F1 metric for each class.Shape: (nc,).
@@ -603,7 +614,9 @@ def ap_per_class(
         f1_curve (np.ndarray): F1-score curves for each class. Shape: (nc, 1000).
         x (np.ndarray): X-axis values for the curves. Shape: (1000,).
         prec_values (np.ndarray): Precision values at mAP@0.5 for each class. Shape: (nc, 1000).
+        figures (list[Figure]): List of all the figures created during validation.
     """
+    figures: list[Figure] = []
     # Sort by objectness
     i = np.argsort(-conf)
     tp, conf, pred_cls = tp[i], conf[i], pred_cls[i]
@@ -649,17 +662,19 @@ def ap_per_class(
     names = [v for k, v in names.items() if k in unique_classes]  # list: only classes that have data
     names = dict(enumerate(names))  # to dict
     if plot:
-        plot_pr_curve(x, prec_values, ap, save_dir / f"{prefix}PR_curve.png", names, on_plot=on_plot, plot_settings=plot_settings)
-        plot_mc_curve(x, f1_curve, save_dir / f"{prefix}F1_curve.png", names, ylabel="F1", on_plot=on_plot, plot_settings=plot_settings)
-        plot_mc_curve(x, p_curve, save_dir / f"{prefix}P_curve.png", names, ylabel="Precision", on_plot=on_plot, plot_settings=plot_settings)
-        plot_mc_curve(x, r_curve, save_dir / f"{prefix}R_curve.png", names, ylabel="Recall", on_plot=on_plot, plot_settings=plot_settings)
-        plot_per_class_curves(save_dir=save_dir, names=names, on_plot=on_plot, plot_settings=plot_settings)
+        prefix = 'test_' if save_dir.stem == 'validation' else 'val_'
+        plot_prefix = 'Test ' if prefix == 'test_' else 'Validation '
+        figures.extend([plot_pr_curve(x, prec_values, ap, save_dir / f"{prefix}PR_curve.svg", names, on_plot=on_plot, plot_settings=plot_settings, prefix=plot_prefix),
+        plot_mc_curve(x, f1_curve, save_dir / f"{prefix}F1_curve.svg", names, ylabel="F1", on_plot=on_plot, plot_settings=plot_settings, prefix=plot_prefix),
+        plot_mc_curve(x, p_curve, save_dir / f"{prefix}P_curve.svg", names, ylabel="Precision", on_plot=on_plot, plot_settings=plot_settings, prefix=plot_prefix),
+        plot_mc_curve(x, r_curve, save_dir / f"{prefix}R_curve.svg", names, ylabel="Recall", on_plot=on_plot, plot_settings=plot_settings, prefix=plot_prefix)])
+        figures.extend(plot_per_class_curves(save_dir=save_dir, names=names, on_plot=on_plot, plot_settings=plot_settings, prefix=plot_prefix)) # type: ignore
 
     i = smooth(f1_curve.mean(0), 0.1).argmax()  # max F1 index
     p, r, f1 = p_curve[:, i], r_curve[:, i], f1_curve[:, i]  # max-F1 precision, recall, F1 values
     tp = (r * nt).round()  # true positives
     fp = (tp / (p + eps) - tp).round()  # false positives
-    return tp, fp, p, r, f1, ap, unique_classes.astype(int), p_curve, r_curve, f1_curve, x, prec_values
+    return (tp, fp, p, r, f1, ap, unique_classes.astype(int), p_curve, r_curve, f1_curve, x, prec_values), figures
 
 
 class Metric(SimpleClass):
@@ -873,10 +888,11 @@ class DetMetrics(SimpleClass):
         self.speed = {"preprocess": 0.0, "inference": 0.0, "loss": 0.0, "postprocess": 0.0}
         self.task = "detect"
         self.plot_settings = None
+        self.figures: list[Figure] = []
 
     def process(self, tp, conf, pred_cls, target_cls, on_plot=None):
         """Process predicted results for object detection and update metrics."""
-        results = ap_per_class(
+        results, figures = ap_per_class(
             tp,
             conf,
             pred_cls,
@@ -886,9 +902,10 @@ class DetMetrics(SimpleClass):
             names=self.names,
             on_plot=on_plot,
             plot_settings=self.plot_settings
-        )[2:]
+        )
+        self.figures = figures
         self.box.nc = len(self.names)
-        self.box.update(results)
+        self.box.update(results[2:])
 
     @property
     def keys(self):

@@ -96,7 +96,7 @@ class BaseValidator:
         self.jdict = None
         self.speed = {"preprocess": 0.0, "inference": 0.0, "loss": 0.0, "postprocess": 0.0}
 
-        self.save_dir = save_dir or get_save_dir(self.args)
+        self.save_dir: Path = save_dir or get_save_dir(self.args)
         (self.save_dir / "labels" if self.args.save_txt else self.save_dir).mkdir(parents=True, exist_ok=True)
         if self.args.conf is None:
             self.args.conf = 0.001  # default conf=0.001

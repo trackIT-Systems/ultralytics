@@ -1,5 +1,6 @@
 # Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 
+from matplotlib.figure import Figure
 from ultralytics.utils import LOGGER, SETTINGS, TESTS_RUNNING, colorstr
 
 try:
@@ -28,7 +29,11 @@ def _log_scalars(scalars, step=0):
     if WRITER:
         for k, v in scalars.items():
             WRITER.add_scalar(k, v, step)
-
+            
+def _log_figure(figure: Figure, step=0):
+    if WRITER:
+        tag: str = figure.axes[0].get_title()
+        WRITER.add_figure(tag, figure, step)
 
 def _log_tensorboard_graph(trainer):
     """Log model graph to TensorBoard."""
@@ -65,6 +70,13 @@ def _log_tensorboard_graph(trainer):
             except Exception as e:
                 LOGGER.warning(f"{PREFIX}WARNING ⚠️ TensorBoard graph visualization failure {e}")
 
+def _log_tensorboard_histogram(trainer):
+    if WRITER:
+        for _, (name, param) in enumerate(trainer.model.named_parameters()):
+            name_parts: str = name.split('.')
+            module = ".".join(name_parts[:3])
+            layer = ".".join(name_parts[3:])
+            WRITER.add_histogram(tag=f"{module}/{layer}", values=param, global_step=trainer.epoch + 1)
 
 def on_pretrain_routine_start(trainer):
     """Initialize TensorBoard logging with SummaryWriter."""
@@ -82,16 +94,34 @@ def on_train_start(trainer):
     if WRITER:
         _log_tensorboard_graph(trainer)
 
-
 def on_train_epoch_end(trainer):
     """Logs scalar statistics at the end of a training epoch."""
     _log_scalars(trainer.label_loss_items(trainer.tloss, prefix="train"), trainer.epoch + 1)
     _log_scalars(trainer.lr, trainer.epoch + 1)
-
+    _log_tensorboard_histogram(trainer)
 
 def on_fit_epoch_end(trainer):
     """Logs epoch metrics at end of training epoch."""
     _log_scalars(trainer.metrics, trainer.epoch + 1)
+    for k,v in trainer.validator.epoch_class_metrics:
+        cls, metric = k.split('_')
+        _log_scalars({f'{metric}/{cls}': v}, trainer.epoch + 1)
+    validator = trainer.validator
+    for figure in validator.epoch_figures:
+        _log_figure(figure, trainer.epoch + 1)
+
+def on_train_end(trainer):
+    if WRITER:
+        validator = trainer.validator
+        test_validator = trainer.test_validator
+        for figure in validator.metrics.figures:
+            _log_figure(figure, 0)
+        for figure in validator.final_figures:
+            _log_figure(figure, 0)
+        for figure in test_validator.metrics.figures:
+            _log_figure(figure, 0)
+        for figure in test_validator.final_figures:
+            _log_figure(figure, 0)
 
 
 callbacks = (
@@ -100,6 +130,7 @@ callbacks = (
         "on_train_start": on_train_start,
         "on_fit_epoch_end": on_fit_epoch_end,
         "on_train_epoch_end": on_train_epoch_end,
+        "on_train_end": on_train_end,
     }
     if SummaryWriter
     else {}
