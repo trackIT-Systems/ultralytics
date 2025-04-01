@@ -437,7 +437,8 @@ class ConfusionMatrix:
         title = "Epoch " + title if not save else plot_prefix + title
         ax.set_title(title)
         plot_fname = Path(save_dir) / f"{title.lower().replace(' ', '_')}.svg" #.png"
-        fig.savefig(plot_fname, dpi=250)
+        if save:
+            fig.savefig(plot_fname, dpi=250)
         plt.close(fig)
         if on_plot:
             on_plot(plot_fname)
