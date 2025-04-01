@@ -548,7 +548,7 @@ def plot_per_class_curves(save_dir, names={}, on_plot=None, plot_settings={}, pr
         figures.append(fig)
         if on_plot:
             on_plot(save_path)
-        return figures
+    return figures
 
 
 def compute_ap(recall, precision):
