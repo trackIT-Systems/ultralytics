@@ -529,7 +529,7 @@ def plot_per_class_curves(save_dir, names={}, on_plot=None, plot_settings={}, pr
     import pandas as pd
     from scipy.ndimage import gaussian_filter1d
     df = pd.read_csv(class_metrics)
-    for metric in ['Precision', 'Recall', 'mAP50', 'mAP50:95', 'F1']:
+    for metric in ['Precision', 'Recall', 'mAP50', 'mAP50:95', 'F1'] if 'mAP50' in "".join(df.columns) else ['Precision', 'Recall', 'F1']:
         fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True) 
         for i, y in names.items():
             col = f"{y}_{metric}"
@@ -1235,19 +1235,54 @@ class ClassifyMetrics(SimpleClass):
         process(targets, pred): Processes the targets and predictions to compute classification metrics.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, save_dir=Path("."), plot=False, names={}) -> None:
         """Initialize a ClassifyMetrics instance."""
         self.top1 = 0
         self.top5 = 0
         self.speed = {"preprocess": 0.0, "inference": 0.0, "loss": 0.0, "postprocess": 0.0}
         self.task = "classify"
+        self.plot_settings = None
+        self.save_dir = save_dir
+        self.plot = plot
+        self.names = names
+        self.p = []  # (nc, )
+        self.r = []  # (nc, )
+        self.f1 = []  # (nc, )
+        self.all_ap = []  # (nc, 10)
+        self.ap_class_index = []  # (nc, )
+        self.figures: list[Figure] = []
 
-    def process(self, targets, pred):
+    def process(self, targets, pred, conf, on_plot=None):
         """Target classes and predicted classes."""
-        pred, targets = torch.cat(pred), torch.cat(targets)
+        pred, targets, conf = torch.cat(pred), torch.cat(targets), torch.cat(conf)
         correct = (targets[:, None] == pred).float()
         acc = torch.stack((correct[:, 0], correct.max(1).values), dim=1)  # (top1, top5) accuracy
         self.top1, self.top5 = acc.mean(0).tolist()
+        results, figures = ap_per_class(
+            correct[:, :1],
+            conf[:, 0],
+            pred[:, 0],
+            targets,
+            plot=self.plot,
+            save_dir=self.save_dir,
+            names=self.names,
+            on_plot=on_plot,
+            plot_settings=self.plot_settings
+        )
+        self.figures = figures
+        
+        (
+            self.p,
+            self.r,
+            self.f1,
+            self.all_ap,
+            self.ap_class_index,
+            self.p_curve,
+            self.r_curve,
+            self.f1_curve,
+            self.px,
+            self.prec_values,
+        ) = results[2:]
 
     @property
     def fitness(self):
@@ -1273,6 +1308,10 @@ class ClassifyMetrics(SimpleClass):
     def curves_results(self):
         """Returns a list of curves for accessing specific metrics curves."""
         return []
+    
+    def class_result(self, i):
+        """Return the result of evaluating the performance of a classification model on a specific class."""
+        return self.p[i], self.r[i], self.f1[i]
 
 
 class OBBMetrics(SimpleClass):

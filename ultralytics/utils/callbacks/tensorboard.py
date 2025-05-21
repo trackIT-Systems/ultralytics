@@ -112,16 +112,18 @@ def on_fit_epoch_end(trainer):
 
 def on_train_end(trainer):
     if WRITER:
-        validator = trainer.validator
-        test_validator = trainer.test_validator
-        for figure in validator.metrics.figures:
-            _log_figure(figure, 0)
-        for figure in validator.final_figures:
-            _log_figure(figure, 0)
-        for figure in test_validator.metrics.figures:
-            _log_figure(figure, 0)
-        for figure in test_validator.final_figures:
-            _log_figure(figure, 0)
+        if hasattr(trainer, "validator"):
+            validator = trainer.validator
+            for figure in validator.metrics.figures:
+                _log_figure(figure, 0)
+            for figure in validator.final_figures:
+                _log_figure(figure, 0)
+        if hasattr(trainer, "test_validator"):
+            test_validator = trainer.test_validator
+            for figure in test_validator.metrics.figures:
+                _log_figure(figure, 0)
+            for figure in test_validator.final_figures:
+                _log_figure(figure, 0)
 
 
 callbacks = (
