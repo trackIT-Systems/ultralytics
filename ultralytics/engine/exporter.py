@@ -224,7 +224,7 @@ class Exporter:
             _callbacks (dict, optional): Dictionary of callback functions. Defaults to None.
         """
         self.args: SimpleNamespace = get_cfg(cfg, overrides)
-        self.output_path: str = f'/yolobat-train/var/model_export/yolobat/{self.args.version}/{self.args.version}_{self.args.release}'
+        self.output_path: str = self.args.output_path
         os.makedirs(self.output_path, exist_ok=True)
 
         if self.args.format.lower() in {"coreml", "mlmodel"}:  # fix attempt for protobuf<3.20.x errors
