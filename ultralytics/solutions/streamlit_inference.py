@@ -1,14 +1,17 @@
 # Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 
 import io
-from typing import Any
+from typing import Any, List
 
 import cv2
+import torch
 
 from ultralytics import YOLO
 from ultralytics.utils import LOGGER
 from ultralytics.utils.checks import check_requirements
 from ultralytics.utils.downloads import GITHUB_ASSETS_STEMS
+
+torch.classes.__path__ = []  # Torch module __path__._path issue: https://github.com/datalab-to/marker/issues/442
 
 
 class Inference:
@@ -20,33 +23,38 @@ class Inference:
 
     Attributes:
         st (module): Streamlit module for UI creation.
-        temp_dict (Dict): Temporary dictionary to store the model path and other configuration.
+        temp_dict (dict): Temporary dictionary to store the model path and other configuration.
         model_path (str): Path to the loaded model.
         model (YOLO): The YOLO model instance.
         source (str): Selected video source (webcam or video file).
-        enable_trk (str): Enable tracking option ("Yes" or "No").
+        enable_trk (bool): Enable tracking option.
         conf (float): Confidence threshold for detection.
         iou (float): IoU threshold for non-maximum suppression.
         org_frame (Any): Container for the original frame to be displayed.
         ann_frame (Any): Container for the annotated frame to be displayed.
-        vid_file_name (Union[str, int]): Name of the uploaded video file or webcam index.
+        vid_file_name (str | int): Name of the uploaded video file or webcam index.
         selected_ind (List[int]): List of selected class indices for detection.
 
     Methods:
-        web_ui: Sets up the Streamlit web interface with custom HTML elements.
-        sidebar: Configures the Streamlit sidebar for model and inference settings.
-        source_upload: Handles video file uploads through the Streamlit interface.
-        configure: Configures the model and loads selected classes for inference.
-        inference: Performs real-time object detection inference.
+        web_ui: Set up the Streamlit web interface with custom HTML elements.
+        sidebar: Configure the Streamlit sidebar for model and inference settings.
+        source_upload: Handle video file uploads through the Streamlit interface.
+        configure: Configure the model and load selected classes for inference.
+        inference: Perform real-time object detection inference.
 
     Examples:
-        >>> inf = Inference(model="path/to/model.pt")  # Model is an optional argument
+        Create an Inference instance with a custom model
+        >>> inf = Inference(model="path/to/model.pt")
+        >>> inf.inference()
+
+        Create an Inference instance with default settings
+        >>> inf = Inference()
         >>> inf.inference()
     """
 
-    def __init__(self, **kwargs: Any):
+    def __init__(self, **kwargs: Any) -> None:
         """
-        Initializes the Inference class, checking Streamlit requirements and setting up the model path.
+        Initialize the Inference class, checking Streamlit requirements and setting up the model path.
 
         Args:
             **kwargs (Any): Additional keyword arguments for model configuration.
@@ -62,7 +70,7 @@ class Inference:
         self.org_frame = None  # Container for the original frame display
         self.ann_frame = None  # Container for the annotated frame display
         self.vid_file_name = None  # Video file name or webcam index
-        self.selected_ind = []  # List of selected class indices for detection
+        self.selected_ind: List[int] = []  # List of selected class indices for detection
         self.model = None  # YOLO model instance
 
         self.temp_dict = {"model": None, **kwargs}
@@ -72,8 +80,8 @@ class Inference:
 
         LOGGER.info(f"Ultralytics Solutions: ✅ {self.temp_dict}")
 
-    def web_ui(self):
-        """Sets up the Streamlit web interface with custom HTML elements."""
+    def web_ui(self) -> None:
+        """Set up the Streamlit web interface with custom HTML elements."""
         menu_style_cfg = """<style>MainMenu {visibility: hidden;}</style>"""  # Hide main menu style
 
         # Main title of streamlit application
@@ -91,8 +99,8 @@ class Inference:
         self.st.markdown(main_title_cfg, unsafe_allow_html=True)
         self.st.markdown(sub_title_cfg, unsafe_allow_html=True)
 
-    def sidebar(self):
-        """Configures the Streamlit sidebar for model and inference settings."""
+    def sidebar(self) -> None:
+        """Configure the Streamlit sidebar for model and inference settings."""
         with self.st.sidebar:  # Add Ultralytics LOGO
             logo = "https://raw.githubusercontent.com/ultralytics/assets/main/logo/Ultralytics_Logotype_Original.svg"
             self.st.image(logo, width=250)
@@ -102,7 +110,7 @@ class Inference:
             "Video",
             ("webcam", "video"),
         )  # Add source selection dropdown
-        self.enable_trk = self.st.sidebar.radio("Enable Tracking", ("Yes", "No"))  # Enable object tracking
+        self.enable_trk = self.st.sidebar.radio("Enable Tracking", ("Yes", "No")) == "Yes"  # Enable object tracking
         self.conf = float(
             self.st.sidebar.slider("Confidence Threshold", 0.0, 1.0, self.conf, 0.01)
         )  # Slider for confidence
@@ -112,8 +120,8 @@ class Inference:
         self.org_frame = col1.empty()  # Container for original frame
         self.ann_frame = col2.empty()  # Container for annotated frame
 
-    def source_upload(self):
-        """Handles video file uploads through the Streamlit interface."""
+    def source_upload(self) -> None:
+        """Handle video file uploads through the Streamlit interface."""
         self.vid_file_name = ""
         if self.source == "video":
             vid_file = self.st.sidebar.file_uploader("Upload Video File", type=["mp4", "mov", "avi", "mkv"])
@@ -125,12 +133,20 @@ class Inference:
         elif self.source == "webcam":
             self.vid_file_name = 0  # Use webcam index 0
 
-    def configure(self):
-        """Configures the model and loads selected classes for inference."""
+    def configure(self) -> None:
+        """Configure the model and load selected classes for inference."""
         # Add dropdown menu for model selection
-        available_models = [x.replace("yolo", "YOLO") for x in GITHUB_ASSETS_STEMS if x.startswith("yolo11")]
+        M_ORD, T_ORD = ["yolo11n", "yolo11s", "yolo11m", "yolo11l", "yolo11x"], ["", "-seg", "-pose", "-obb", "-cls"]
+        available_models = sorted(
+            [
+                x.replace("yolo", "YOLO")
+                for x in GITHUB_ASSETS_STEMS
+                if any(x.startswith(b) for b in M_ORD) and "grayscale" not in x
+            ],
+            key=lambda x: (M_ORD.index(x[:7].lower()), T_ORD.index(x[7:].lower() or "")),
+        )
         if self.model_path:  # If user provided the custom model, insert model without suffix as *.pt is added later
-            available_models.insert(0, self.model_path.split(".pt")[0])
+            available_models.insert(0, self.model_path.split(".pt", 1)[0])
         selected_model = self.st.sidebar.selectbox("Model", available_models)
 
         with self.st.spinner("Model is downloading..."):
@@ -145,8 +161,8 @@ class Inference:
         if not isinstance(self.selected_ind, list):  # Ensure selected_options is a list
             self.selected_ind = list(self.selected_ind)
 
-    def inference(self):
-        """Performs real-time object detection inference on video or webcam feed."""
+    def inference(self) -> None:
+        """Perform real-time object detection inference on video or webcam feed."""
         self.web_ui()  # Initialize the web interface
         self.sidebar()  # Create the sidebar
         self.source_upload()  # Upload the video source
@@ -166,7 +182,7 @@ class Inference:
                     break
 
                 # Process frame with model
-                if self.enable_trk == "Yes":
+                if self.enable_trk:
                     results = self.model.track(
                         frame, conf=self.conf, iou=self.iou, classes=self.selected_ind, persist=True
                     )

@@ -1,5 +1,7 @@
 # Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 
+from typing import Any
+
 from ultralytics.solutions.solutions import BaseSolution, SolutionAnnotator, SolutionResults
 from ultralytics.utils import LOGGER
 from ultralytics.utils.plotting import colors
@@ -21,9 +23,9 @@ class SecurityAlarm(BaseSolution):
         from_email (str): Sender's email address for alerts.
 
     Methods:
-        authenticate: Sets up email server authentication for sending alerts.
-        send_email: Sends an email notification with details and an image attachment.
-        process: Monitors the frame, processes detections, and triggers alerts if thresholds are crossed.
+        authenticate: Set up email server authentication for sending alerts.
+        send_email: Send an email notification with details and an image attachment.
+        process: Monitor the frame, process detections, and trigger alerts if thresholds are crossed.
 
     Examples:
         >>> security = SecurityAlarm()
@@ -32,9 +34,9 @@ class SecurityAlarm(BaseSolution):
         >>> results = security.process(frame)
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         """
-        Initializes the SecurityAlarm class with parameters for real-time object monitoring.
+        Initialize the SecurityAlarm class with parameters for real-time object monitoring.
 
         Args:
             **kwargs (Any): Additional keyword arguments passed to the parent class.
@@ -46,9 +48,9 @@ class SecurityAlarm(BaseSolution):
         self.to_email = ""
         self.from_email = ""
 
-    def authenticate(self, from_email, password, to_email):
+    def authenticate(self, from_email: str, password: str, to_email: str) -> None:
         """
-        Authenticates the email server for sending alert notifications.
+        Authenticate the email server for sending alert notifications.
 
         Args:
             from_email (str): Sender's email address.
@@ -69,13 +71,13 @@ class SecurityAlarm(BaseSolution):
         self.to_email = to_email
         self.from_email = from_email
 
-    def send_email(self, im0, records=5):
+    def send_email(self, im0, records: int = 5) -> None:
         """
-        Sends an email notification with an image attachment indicating the number of objects detected.
+        Send an email notification with an image attachment indicating the number of objects detected.
 
         Args:
-            im0 (numpy.ndarray): The input image or frame to be attached to the email.
-            records (int): The number of detected objects to be included in the email message.
+            im0 (np.ndarray): The input image or frame to be attached to the email.
+            records (int, optional): The number of detected objects to be included in the email message.
 
         This method encodes the input image, composes the email message with details about the detection, and sends it
         to the specified recipient.
@@ -110,16 +112,16 @@ class SecurityAlarm(BaseSolution):
         # Send the email
         try:
             self.server.send_message(message)
-            LOGGER.info("✅ Email sent successfully!")
+            LOGGER.info("Email sent successfully!")
         except Exception as e:
-            LOGGER.error(f"❌ Failed to send email: {e}")
+            LOGGER.error(f"Failed to send email: {e}")
 
-    def process(self, im0):
+    def process(self, im0) -> SolutionResults:
         """
-        Monitors the frame, processes object detections, and triggers alerts if thresholds are exceeded.
+        Monitor the frame, process object detections, and trigger alerts if thresholds are exceeded.
 
         Args:
-            im0 (numpy.ndarray): The input image or frame to be processed and annotated.
+            im0 (np.ndarray): The input image or frame to be processed and annotated.
 
         Returns:
             (SolutionResults): Contains processed image `plot_im`, 'total_tracks' (total number of tracked objects) and
@@ -143,7 +145,7 @@ class SecurityAlarm(BaseSolution):
             annotator.box_label(box, label=self.names[cls], color=colors(cls, True))
 
         total_det = len(self.clss)
-        if total_det > self.records and not self.email_sent:  # Only send email if not sent before
+        if total_det >= self.records and not self.email_sent:  # Only send email if not sent before
             self.send_email(im0, total_det)
             self.email_sent = True
 

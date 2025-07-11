@@ -1,3 +1,5 @@
+// Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
+
 #include "inference.h"
 
 Inference::Inference(const std::string &onnxModelPath, const cv::Size &modelInputShape, const std::string &classesTxtFile, const bool &runWithCuda)
@@ -177,6 +179,9 @@ cv::Mat Inference::formatToSquare(const cv::Mat &source, int *pad_x, int *pad_y,
 {
     int col = source.cols;
     int row = source.rows;
+    int m_inputWidth = modelShape.width;
+    int m_inputHeight = modelShape.height;
+
     *scale = std::min(m_inputWidth / (float)col, m_inputHeight / (float)row);
     int resized_w = col * *scale;
     int resized_h = row * *scale;

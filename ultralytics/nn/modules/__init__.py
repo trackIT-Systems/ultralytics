@@ -1,9 +1,12 @@
 # Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 """
-Ultralytics modules.
+Ultralytics neural network modules.
+
+This module provides access to various neural network components used in Ultralytics models, including convolution
+blocks, attention mechanisms, transformer components, and detection/segmentation heads.
 
 Examples:
-    Visualize a module with Netron.
+    Visualize a module with Netron
     >>> from ultralytics.nn.modules import *
     >>> import torch
     >>> import os
@@ -48,6 +51,7 @@ from .block import (
     HGBlock,
     HGStem,
     ImagePoolingAttn,
+    MaxSigmoidAttnBlock,
     Proto,
     RepC3,
     RepNCSPELAN4,
@@ -72,7 +76,19 @@ from .conv import (
     RepConv,
     SpatialAttention,
 )
-from .head import OBB, Classify, Detect, Pose, RTDETRDecoder, Segment, WorldDetect, v10Detect
+from .head import (
+    OBB,
+    Classify,
+    Detect,
+    LRPCHead,
+    Pose,
+    RTDETRDecoder,
+    Segment,
+    WorldDetect,
+    YOLOEDetect,
+    YOLOESegment,
+    v10Detect,
+)
 from .transformer import (
     AIFI,
     MLP,
@@ -140,8 +156,12 @@ __all__ = (
     "ResNetLayer",
     "OBB",
     "WorldDetect",
+    "YOLOEDetect",
+    "YOLOESegment",
     "v10Detect",
+    "LRPCHead",
     "ImagePoolingAttn",
+    "MaxSigmoidAttnBlock",
     "ContrastiveHead",
     "BNContrastiveHead",
     "RepNCSPELAN4",

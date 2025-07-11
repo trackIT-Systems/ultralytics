@@ -12,16 +12,16 @@ Monitoring workouts through pose estimation with [Ultralytics YOLO11](https://gi
 
 <p align="center">
   <br>
-  <iframe loading="lazy" width="720" height="405" src="https://www.youtube.com/embed/LGGxqLZtvuw"
+  <iframe loading="lazy" width="720" height="405" src="https://www.youtube.com/embed/Ck7DW96dNok"
     title="YouTube video player" frameborder="0"
     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
     allowfullscreen>
   </iframe>
   <br>
-  <strong>Watch:</strong> Workouts Monitoring using Ultralytics YOLO11 | Push-ups, Pull-ups, Ab Workouts
+  <strong>Watch:</strong> How to Monitor Workout Exercises with Ultralytics YOLO | Squats, Leg Extension, Pushups and More
 </p>
 
-## Advantages of Workouts Monitoring?
+## Advantages of Workouts Monitoring
 
 - **Optimized Performance:** Tailoring workouts based on monitoring data for better results.
 - **Goal Achievement:** Track and adjust fitness goals for measurable progress.
@@ -45,10 +45,10 @@ Monitoring workouts through pose estimation with [Ultralytics YOLO11](https://gi
         yolo solutions workout show=True
 
         # Pass a source video
-        yolo solutions workout source="path/to/video/file.mp4"
+        yolo solutions workout source="path/to/video.mp4"
 
         # Use keypoints for pushups
-        yolo solutions workout kpts=[6, 8, 10]
+        yolo solutions workout kpts="[6, 8, 10]"
         ```
 
     === "Python"
@@ -58,7 +58,7 @@ Monitoring workouts through pose estimation with [Ultralytics YOLO11](https://gi
 
         from ultralytics import solutions
 
-        cap = cv2.VideoCapture("path/to/video/file.mp4")
+        cap = cv2.VideoCapture("path/to/video.mp4")
         assert cap.isOpened(), "Error reading video file"
 
         # Video writer
@@ -111,20 +111,20 @@ The `AIGym` solution also supports a range of object tracking parameters:
 Additionally, the following visualization settings can be applied:
 
 {% from "macros/visualization-args.md" import param_table %}
-{{ param_table(["show", "line_width"]) }}
+{{ param_table(["show", "line_width", "show_conf", "show_labels"]) }}
 
 ## FAQ
 
 ### How do I monitor my workouts using Ultralytics YOLO11?
 
-To monitor your workouts using Ultralytics YOLO11, you can utilize the pose estimation capabilities to track and analyze key body landmarks and joints in real-time. This allows you to receive instant feedback on your exercise form, count repetitions, and measure performance metrics. You can start by using the provided example code for push-ups, pull-ups, or ab workouts as shown:
+To monitor your workouts using Ultralytics YOLO11, you can utilize the [pose estimation capabilities](https://docs.ultralytics.com/tasks/pose/) to track and analyze key body landmarks and joints in real-time. This allows you to receive instant feedback on your exercise form, count repetitions, and measure performance metrics. You can start by using the provided example code for push-ups, pull-ups, or ab workouts as shown:
 
 ```python
 import cv2
 
 from ultralytics import solutions
 
-cap = cv2.VideoCapture("path/to/video/file.mp4")
+cap = cv2.VideoCapture("path/to/video.mp4")
 assert cap.isOpened(), "Error reading video file"
 w, h, fps = (int(cap.get(x)) for x in (cv2.CAP_PROP_FRAME_WIDTH, cv2.CAP_PROP_FRAME_HEIGHT, cv2.CAP_PROP_FPS))
 
@@ -139,7 +139,7 @@ while cap.isOpened():
     if not success:
         print("Video frame is empty or processing is complete.")
         break
-    results = gym.monitor(im0)
+    results = gym(im0)
 
 cv2.destroyAllWindows()
 ```
@@ -160,7 +160,7 @@ You can watch a [YouTube video demonstration](https://www.youtube.com/watch?v=LG
 
 ### How accurate is Ultralytics YOLO11 in detecting and tracking exercises?
 
-Ultralytics YOLO11 is highly accurate in detecting and tracking exercises due to its state-of-the-art pose estimation capabilities. It can accurately track key body landmarks and joints, providing real-time feedback on exercise form and performance metrics. The model's pretrained weights and robust architecture ensure high [precision](https://www.ultralytics.com/glossary/precision) and reliability. For real-world examples, check out the [real-world applications](#real-world-applications) section in the documentation, which showcases push-ups and pull-ups counting.
+Ultralytics YOLO11 is highly accurate in detecting and tracking exercises due to its state-of-the-art [pose estimation](https://www.ultralytics.com/blog/how-to-use-ultralytics-yolo11-for-pose-estimation) capabilities. It can accurately track key body landmarks and joints, providing real-time feedback on exercise form and performance metrics. The model's pretrained weights and robust architecture ensure high [precision](https://www.ultralytics.com/glossary/precision) and reliability. For real-world examples, check out the [real-world applications](#real-world-applications) section in the documentation, which showcases push-ups and pull-ups counting.
 
 ### Can I use Ultralytics YOLO11 for custom workout routines?
 
@@ -172,11 +172,11 @@ from ultralytics import solutions
 gym = solutions.AIGym(
     line_width=2,
     show=True,
-    kpts=[6, 8, 10],
+    kpts=[6, 8, 10],  # For pushups - can be customized for other exercises
 )
 ```
 
-For more details on setting arguments, refer to the [Arguments `AIGym`](#aigym-arguments) section. This flexibility allows you to monitor various exercises and customize routines based on your needs.
+For more details on setting arguments, refer to the [Arguments `AIGym`](#aigym-arguments) section. This flexibility allows you to monitor various exercises and customize routines based on your [fitness goals](https://www.ultralytics.com/blog/ai-in-our-day-to-day-health-and-fitness).
 
 ### How can I save the workout monitoring output using Ultralytics YOLO11?
 
@@ -187,7 +187,7 @@ import cv2
 
 from ultralytics import solutions
 
-cap = cv2.VideoCapture("path/to/video/file.mp4")
+cap = cv2.VideoCapture("path/to/video.mp4")
 assert cap.isOpened(), "Error reading video file"
 w, h, fps = (int(cap.get(x)) for x in (cv2.CAP_PROP_FRAME_WIDTH, cv2.CAP_PROP_FRAME_HEIGHT, cv2.CAP_PROP_FPS))
 
@@ -207,8 +207,9 @@ while cap.isOpened():
     results = gym(im0)
     video_writer.write(results.plot_im)
 
-cv2.destroyAllWindows()
+cap.release()
 video_writer.release()
+cv2.destroyAllWindows()
 ```
 
-This setup writes the monitored video to an output file. For more details, refer to the [Workouts Monitoring with Save Output](#workouts-monitoring-using-ultralytics-yolo11) section.
+This setup writes the monitored video to an output file, allowing you to review your workout performance later or share it with trainers for additional feedback.
