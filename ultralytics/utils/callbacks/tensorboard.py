@@ -5,7 +5,7 @@ from ultralytics.utils import LOGGER, SETTINGS, TESTS_RUNNING, colorstr, torch_u
 
 try:
     assert not TESTS_RUNNING  # do not log pytest
-    assert SETTINGS["tensorboard"] is True  # verify integration is enabled
+    #assert SETTINGS["tensorboard"] is True  # verify integration is enabled
     WRITER = None  # TensorBoard SummaryWriter instance
     PREFIX = colorstr("TensorBoard: ")
 

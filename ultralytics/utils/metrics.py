@@ -428,7 +428,7 @@ class ConfusionMatrix(DataExportMixin):
 
     @TryExcept(msg="ConfusionMatrix plot failure")
     @plt_settings()
-    def plot(self, normalize: bool = True, save_dir: str = Path(), on_plot=None, save=True):
+    def plot(self, normalize: bool = True, save_dir: Path = Path(), on_plot=None, save=True):
         """
         Plot the confusion matrix using matplotlib and save it to a file.
 
@@ -454,10 +454,10 @@ class ConfusionMatrix(DataExportMixin):
             nc = nn = self.nc if self.task == "classify" else self.nc + 1
         ticklabels = (self.names + ["background"]) if (0 < nn < 99) and (nn == nc) else "auto"
         xy_ticks = np.arange(len(ticklabels))
-        tick_fontsize = max(6, 15 - 0.1 * nc)  # Minimum size is 6
-        label_fontsize = max(6, 12 - 0.1 * nc)
-        title_fontsize = max(6, 12 - 0.1 * nc)
-        btm = max(0.1, 0.25 - 0.001 * nc)  # Minimum value is 0.1
+        # tick_fontsize = max(6, 15 - 0.1 * nc)  # Minimum size is 6
+        # label_fontsize = max(6, 12 - 0.1 * nc)
+        # title_fontsize = max(6, 12 - 0.1 * nc)
+        # btm = max(0.1, 0.25 - 0.001 * nc)  # Minimum value is 0.1
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")  # suppress empty matrix RuntimeWarning: All-NaN slice encountered
             im = ax.imshow(array, cmap="Blues", vmin=0.0, interpolation="none")
@@ -475,29 +475,30 @@ class ConfusionMatrix(DataExportMixin):
                             f"{val:.2f}" if normalize else f"{int(val)}",
                             ha="center",
                             va="center",
-                            fontsize=10,
+                            fontsize=8, #10,
                             color="white" if val > color_threshold else "black",
                         )
             cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.05)
         title = "Confusion Matrix" + " Normalized" * normalize
-        ax.set_xlabel("True", fontsize=label_fontsize, labelpad=10)
-        ax.set_ylabel("Predicted", fontsize=label_fontsize, labelpad=10)
+        ax.set_xlabel("True") #, fontsize=label_fontsize, labelpad=10)
+        ax.set_ylabel("Predicted") #, fontsize=label_fontsize, labelpad=10)
         prefix = 'test_' if save_dir.stem == 'validation' else 'val_'
         plot_prefix = 'Test ' if prefix == 'test_' else 'Validation '
         title = "Epoch " + title if not save else plot_prefix + title
-        ax.set_title(title, fontsize=title_fontsize, pad=20)
+        ax.set_title(title) #, fontsize=title_fontsize, pad=20)
         ax.set_xticks(xy_ticks)
         ax.set_yticks(xy_ticks)
         ax.tick_params(axis="x", bottom=True, top=False, labelbottom=True, labeltop=False)
         ax.tick_params(axis="y", left=True, right=False, labelleft=True, labelright=False)
         if ticklabels != "auto":
-            ax.set_xticklabels(ticklabels, fontsize=tick_fontsize, rotation=90, ha="center")
-            ax.set_yticklabels(ticklabels, fontsize=tick_fontsize)
+            ax.set_xticklabels(ticklabels, rotation=90, ha="center") #fontsize=tick_fontsize
+            ax.set_yticklabels(ticklabels) #fontsize=tick_fontsize
         for s in {"left", "right", "bottom", "top", "outline"}:
             if s != "outline":
                 ax.spines[s].set_visible(False)  # Confusion matrix plot don't have outline
             cbar.ax.spines[s].set_visible(False)
-        fig.subplots_adjust(left=0, right=0.84, top=0.94, bottom=btm)  # Adjust layout to ensure equal margins
+        #fig.subplots_adjust(left=0, right=0.84, top=0.94, bottom=btm)  # Adjust layout to ensure equal margins
+        fig.subplots_adjust(left=0.1, right=0.84, top=0.96, bottom=0.16)  # Adjust layout to ensure equal margins
         plot_fname = Path(save_dir) / f"{title.lower().replace(' ', '_')}.svg" #.png"
         if save:
             fig.savefig(plot_fname, dpi=250)
@@ -564,7 +565,8 @@ def plot_pr_curve(
     save_dir: Path = Path("pr_curve.svg"),
     names: Dict[int, str] = {},
     on_plot=None,
-, plot_settings={}, prefix=""):
+    plot_settings={},
+    prefix=""):
     """
     Plot precision-recall curve.
 
@@ -615,7 +617,8 @@ def plot_mc_curve(
     xlabel: str = "Confidence",
     ylabel: str = "Metric",
     on_plot=None,
-, plot_settings={}, prefix=""):
+    plot_settings={},
+    prefix=""):
     """
     Plot metric-confidence curve.
 
@@ -665,7 +668,6 @@ def plot_per_class_curves(save_dir, names={}, on_plot=None, plot_settings={}, pr
         return figures
     
     import pandas as pd
-    from scipy.ndimage import gaussian_filter1d
     df = pd.read_csv(class_metrics)
     for metric in ['Precision', 'Recall', 'mAP50', 'mAP50:95', 'F1'] if 'mAP50' in "".join(df.columns) else ['Precision', 'Recall', 'F1']:
         fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True) 

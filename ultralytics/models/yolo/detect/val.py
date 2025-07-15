@@ -99,7 +99,6 @@ class DetectionValidator(BaseValidator):
         self.metrics.names = self.names
         self.metrics.plot = self.args.plots
         self.metrics.plot_settings = self.plot_settings
-        self.confusion_matrix = ConfusionMatrix(nc=self.nc, conf=self.args.conf)
         self.seen = 0
         self.jdict = []
         self.metrics.names = self.names
