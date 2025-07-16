@@ -746,7 +746,7 @@ def strip_optimizer(f: Union[str, Path] = "best.pt", s: str = "", updates: Dict[
         x["model"].args = dict(x["model"].args)  # convert from IterableSimpleNamespace to dict
     if hasattr(x["model"], "criterion"):
         x["model"].criterion = None  # strip loss criterion
-    x["model"].half()  # to FP16 # TODO: remove half
+    x["model"]#.half()  # to FP16
     for p in x["model"].parameters():
         p.requires_grad = False
 
