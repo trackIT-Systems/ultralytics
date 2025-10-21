@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
+
 from ultralytics.data.build import load_inference_source
 from ultralytics.engine.model import Model
 from ultralytics.models import yolo
@@ -25,11 +26,11 @@ class YOLO(Model):
 
     This class provides a unified interface for YOLO models, automatically switching to specialized model types
     (YOLOWorld or YOLOE) based on the model filename. It supports various computer vision tasks including object
-    detection, segmentation, classification, pose estimation, and oriented bounding box detection.
+    detection, segmentation, classification, pose estimation, oriented bounding box detection, and dual-label detection.
 
     Attributes:
         model: The loaded YOLO model instance.
-        task: The task type (detect, segment, classify, pose, obb).
+        task: The task type (detect, segment, classify, pose, obb, dual).
         overrides: Configuration overrides for the model.
 
     Methods:
@@ -45,6 +46,9 @@ class YOLO(Model):
 
         Initialize from a YAML configuration
         >>> model = YOLO("yolo11n.yaml")
+
+        Load a dual-label detection model
+        >>> model = YOLO("yolo11n-dual.yaml")
     """
 
     def __init__(self, model: Union[str, Path] = "yolo11n.pt", task: Optional[str] = None, verbose: bool = False):
@@ -87,6 +91,10 @@ class YOLO(Model):
     @property
     def task_map(self) -> Dict[str, Dict[str, Any]]:
         """Map head to model, trainer, validator, and predictor classes."""
+        from trainer.Trainer import DualDetectionTrainer
+        from predictor.predictor import DualDetectionPredictor
+        from modules.model import DualDetectionModel
+        from validator.Validator import DualDetectionValidator
         return {
             "classify": {
                 "model": ClassificationModel,
@@ -117,6 +125,12 @@ class YOLO(Model):
                 "trainer": yolo.obb.OBBTrainer,
                 "validator": yolo.obb.OBBValidator,
                 "predictor": yolo.obb.OBBPredictor,
+            },
+            "dual": {
+                "model": DualDetectionModel,
+                "trainer": DualDetectionTrainer,
+                "validator": DualDetectionValidator,
+                "predictor": DualDetectionPredictor,
             },
         }
 

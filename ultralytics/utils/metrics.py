@@ -428,7 +428,7 @@ class ConfusionMatrix(DataExportMixin):
 
     @TryExcept(msg="ConfusionMatrix plot failure")
     @plt_settings()
-    def plot(self, normalize: bool = True, save_dir: Path = Path(), on_plot=None, save=True):
+    def plot(self, normalize: bool = True, save_dir: Path = Path(), on_plot=None, save=True, postfix: str = ""):
         """
         Plot the confusion matrix using matplotlib and save it to a file.
 
@@ -482,9 +482,11 @@ class ConfusionMatrix(DataExportMixin):
         title = "Confusion Matrix" + " Normalized" * normalize
         ax.set_xlabel("True") #, fontsize=label_fontsize, labelpad=10)
         ax.set_ylabel("Predicted") #, fontsize=label_fontsize, labelpad=10)
-        prefix = 'test_' if save_dir.stem == 'validation' else 'val_'
+        prefix = 'test_' if (save_dir.stem == 'validation' or save_dir.parent.stem == 'validation') else 'val_'
         plot_prefix = 'Test ' if prefix == 'test_' else 'Validation '
         title = "Epoch " + title if not save else plot_prefix + title
+        if postfix:
+            title += f" {postfix}"
         ax.set_title(title) #, fontsize=title_fontsize, pad=20)
         ax.set_xticks(xy_ticks)
         ax.set_yticks(xy_ticks)
@@ -566,7 +568,8 @@ def plot_pr_curve(
     names: Dict[int, str] = {},
     on_plot=None,
     plot_settings={},
-    prefix=""):
+    prefix="",
+    postfix: str=""):
     """
     Plot precision-recall curve.
 
@@ -600,7 +603,10 @@ def plot_pr_curve(
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-    ax.set_title(f"{prefix}Precision-Recall Curve")
+    title = f"{prefix}Precision-Recall Curve"
+    if postfix:
+        title += f" {postfix}"
+    ax.set_title(title)
     fig.savefig(save_dir, dpi=250)
     plt.close(fig)
     if on_plot:
@@ -618,7 +624,8 @@ def plot_mc_curve(
     ylabel: str = "Metric",
     on_plot=None,
     plot_settings={},
-    prefix=""):
+    prefix="",
+    postfix: str=""):
     """
     Plot metric-confidence curve.
 
@@ -653,41 +660,60 @@ def plot_mc_curve(
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-    ax.set_title(f"{prefix}{ylabel}-Confidence Curve")
+    title = f"{prefix}{ylabel}-Confidence Curve"
+    if postfix:
+        title += f" {postfix}"
+    ax.set_title(title)
     fig.savefig(save_dir, dpi=250)
     plt.close(fig)
     if on_plot:
         on_plot(save_dir)
     return fig
 
-def plot_per_class_curves(save_dir, names={}, on_plot=None, plot_settings={}, prefix=""):
+def plot_per_class_curves(save_dir, names={}, on_plot=None, plot_settings={}, prefix="", postfix: str=""):
     """Plots metrics per class."""
     figures: list[Figure] = []
-    class_metrics = save_dir.joinpath("class_metrics.csv")
-    if not class_metrics.exists():
-        return figures
     
-    import pandas as pd
-    df = pd.read_csv(class_metrics)
-    for metric in ['Precision', 'Recall', 'mAP50', 'mAP50:95', 'F1'] if 'mAP50' in "".join(df.columns) else ['Precision', 'Recall', 'F1']:
-        fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True) 
-        for i, y in names.items():
-            col = f"{y}_{metric}"
-            ax.plot(df['epoch'], df[col], linewidth=1, linestyle=plot_settings[i]['line_style'], color=plot_settings[i]['color'], label=f"{names[i]}") #gaussian_filter1d(df[col], sigma=3)
+    for class_metric in ["class_metrics.csv", "class1_metrics.csv", "class2_metrics.csv"]:
+        if save_dir.stem in ["class1_metrics", "class2_metrics"] and class_metric in ["class1_metrics.csv", "class2_metrics.csv"]:
+            class_metrics = save_dir.parent / class_metric
+        else:
+            class_metrics = save_dir.joinpath(class_metric)
+        if not class_metrics.exists():
+            continue
+        
+        import pandas as pd
+        df = pd.read_csv(class_metrics)
+        for metric in ['Precision', 'Recall', 'mAP50', 'mAP50:95', 'F1'] if 'mAP50' in "".join(df.columns) else ['Precision', 'Recall', 'F1']:
+            fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True) 
+            column_missing = False
+            for i, y in names.items():
+                col = f"{y}_{metric}"
+                if col not in df.columns:
+                    column_missing = True
+                    break  # Break out of names loop if column doesn't exist
+                ax.plot(df['epoch'], df[col], linewidth=1, linestyle=plot_settings[i]['line_style'], color=plot_settings[i]['color'], label=f"{names[i]}") #gaussian_filter1d(df[col], sigma=3)
+            
+            if column_missing:
+                plt.close(fig)  # Close the figure since we won't use it
+                break  # Break out of metrics loop
 
-        #y = smooth(py.mean(0), 0.05)
-        #ax.plot(px, y, color="black", label=f"all classes {y.max():.2f} at {px[y.argmax()]:.3f}")
-        ax.set_xlabel('Epoch')
-        ax.set_ylabel(metric)
-        #ax.set_ylim(0, 1)
-        ax.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-        ax.set_title(f"{prefix}Epoch {metric} per Class")
-        save_path = save_dir.joinpath(f"{metric}_per_class.svg")
-        fig.savefig(save_path, dpi=250)
-        plt.close(fig)
-        figures.append(fig)
-        if on_plot:
-            on_plot(save_path)
+            #y = smooth(py.mean(0), 0.05)
+            #ax.plot(px, y, color="black", label=f"all classes {y.max():.2f} at {px[y.argmax()]:.3f}")
+            ax.set_xlabel('Epoch')
+            ax.set_ylabel(metric)
+            #ax.set_ylim(0, 1)
+            ax.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+            title = f"{prefix}Epoch {metric} per Class"
+            if postfix:
+                title += f" {postfix}"
+            ax.set_title(title)
+            save_path = save_dir.joinpath(f"{metric}_per_class.svg")
+            fig.savefig(save_path, dpi=250)
+            plt.close(fig)
+            figures.append(fig)
+            if on_plot:
+                on_plot(save_path)
     return figures
 
 
@@ -725,7 +751,7 @@ def compute_ap(recall: List[float], precision: List[float]) -> Tuple[float, np.n
 
 
 def ap_per_class(
-    tp, conf, pred_cls, target_cls, plot=False, on_plot=None, save_dir=Path(), names={}, eps=1e-16, prefix="", plot_settings=None
+    tp, conf, pred_cls, target_cls, plot=False, on_plot=None, save_dir=Path(), names={}, eps=1e-16, prefix="", plot_settings=None, postfix: str=""
 ):
     """
     Compute the average precision per class for object detection evaluation.
@@ -803,13 +829,13 @@ def ap_per_class(
     f1_curve = 2 * p_curve * r_curve / (p_curve + r_curve + eps)
     names = {i: names[k] for i, k in enumerate(unique_classes) if k in names}  # dict: only classes that have data
     if plot:
-        prefix = 'test_' if save_dir.stem == 'validation' else 'val_'
+        prefix = 'test_' if (save_dir.stem == 'validation' or save_dir.parent.stem == 'validation') else 'val_'
         plot_prefix = 'Test ' if prefix == 'test_' else 'Validation '
-        figures.extend([plot_pr_curve(x, prec_values, ap, save_dir / f"{prefix}PR_curve.svg", names, on_plot=on_plot, plot_settings=plot_settings, prefix=plot_prefix),
-        plot_mc_curve(x, f1_curve, save_dir / f"{prefix}F1_curve.svg", names, ylabel="F1", on_plot=on_plot, plot_settings=plot_settings, prefix=plot_prefix),
-        plot_mc_curve(x, p_curve, save_dir / f"{prefix}P_curve.svg", names, ylabel="Precision", on_plot=on_plot, plot_settings=plot_settings, prefix=plot_prefix),
-        plot_mc_curve(x, r_curve, save_dir / f"{prefix}R_curve.svg", names, ylabel="Recall", on_plot=on_plot, plot_settings=plot_settings, prefix=plot_prefix)])
-        figures.extend(plot_per_class_curves(save_dir=save_dir, names=names, on_plot=on_plot, plot_settings=plot_settings, prefix=plot_prefix)) # type: ignore
+        figures.extend([plot_pr_curve(x, prec_values, ap, save_dir / f"{prefix}PR_curve.svg", names, on_plot=on_plot, plot_settings=plot_settings, prefix=plot_prefix, postfix=postfix),
+        plot_mc_curve(x, f1_curve, save_dir / f"{prefix}F1_curve.svg", names, ylabel="F1", on_plot=on_plot, plot_settings=plot_settings, prefix=plot_prefix, postfix=postfix),
+        plot_mc_curve(x, p_curve, save_dir / f"{prefix}P_curve.svg", names, ylabel="Precision", on_plot=on_plot, plot_settings=plot_settings, prefix=plot_prefix, postfix=postfix),
+        plot_mc_curve(x, r_curve, save_dir / f"{prefix}R_curve.svg", names, ylabel="Recall", on_plot=on_plot, plot_settings=plot_settings, prefix=plot_prefix, postfix=postfix)])
+        figures.extend(plot_per_class_curves(save_dir=save_dir, names=names, on_plot=on_plot, plot_settings=plot_settings, prefix=plot_prefix, postfix=postfix)) # type: ignore
 
     i = smooth(f1_curve.mean(0), 0.1).argmax()  # max F1 index
     p, r, f1 = p_curve[:, i], r_curve[:, i], f1_curve[:, i]  # max-F1 precision, recall, F1 values
@@ -1005,7 +1031,7 @@ class DetMetrics(SimpleClass, DataExportMixin):
         nt_per_image: Number of targets per image.
     """
 
-    def __init__(self, names: Dict[int, str] = {}) -> None:
+    def __init__(self, names: Dict[int, str] = {}, postfix: str="") -> None:
         """
         Initialize a DetMetrics instance with a save directory, plot flag, and class names.
 
@@ -1021,6 +1047,7 @@ class DetMetrics(SimpleClass, DataExportMixin):
         self.stats = dict(tp=[], conf=[], pred_cls=[], target_cls=[], target_img=[])
         self.nt_per_class = None
         self.nt_per_image = None
+        self.postfix = postfix
 
     def update_stats(self, stat: Dict[str, Any]) -> None:
         """
@@ -1058,7 +1085,8 @@ class DetMetrics(SimpleClass, DataExportMixin):
             names=self.names,
             on_plot=on_plot,
             prefix="Box",
-            plot_settings=self.plot_settings
+            plot_settings=self.plot_settings,
+            postfix=self.postfix,
         )
         self.figures = figures
         self.box.nc = len(self.names)

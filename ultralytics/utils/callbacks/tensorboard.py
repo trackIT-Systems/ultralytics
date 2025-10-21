@@ -129,27 +129,71 @@ def on_train_epoch_end(trainer) -> None:
 def on_fit_epoch_end(trainer) -> None:
     """Log epoch metrics at end of training epoch."""
     _log_scalars(trainer.metrics, trainer.epoch + 1)
-    for k,v in trainer.validator.epoch_class_metrics:
-        cls, metric = k.split('_')
-        _log_scalars({f'{metric}/{cls}': v}, trainer.epoch + 1)
+    
+    # Log class metrics - support both standard and dual detection
+    if hasattr(trainer.validator, 'epoch_class_metrics'):
+        for k, v in trainer.validator.epoch_class_metrics:
+            cls, metric = k.split('_')
+            _log_scalars({f'{metric}/{cls}': v}, trainer.epoch + 1)
+    if hasattr(trainer.validator, 'epoch_class1_metrics'):
+        for k, v in trainer.validator.epoch_class1_metrics:
+            cls, metric = k.split('_')
+            _log_scalars({f'{metric}/{cls}': v}, trainer.epoch + 1)
+    if hasattr(trainer.validator, 'epoch_class2_metrics'):
+        for k, v in trainer.validator.epoch_class2_metrics:
+            cls, metric = k.split('_')
+            _log_scalars({f'{metric}/{cls}': v}, trainer.epoch + 1)
+    
     validator = trainer.validator
-    for figure in validator.epoch_figures:
-        _log_figure(figure, trainer.epoch + 1)
+    
+    # Log epoch figures (standard)
+    if hasattr(validator, 'epoch_figures'):
+        for figure in validator.epoch_figures:
+            _log_figure(figure, trainer.epoch + 1)
+            
 
 def on_train_end(trainer):
     if WRITER:
         if hasattr(trainer, "validator"):
             validator = trainer.validator
-            for figure in validator.metrics.figures:
-                _log_figure(figure, 0)
-            for figure in validator.final_figures:
-                _log_figure(figure, 0)
+            
+            # Log final figures
+            if hasattr(validator, 'final_figures'):
+                for figure in validator.final_figures:
+                    _log_figure(figure, 0)
+                    
+            # Log main metrics figures
+            if hasattr(validator, 'metrics') and hasattr(validator.metrics, 'figures'):
+                for figure in validator.metrics.figures:
+                    _log_figure(figure, 0)
+                    
+            # Log dual class figures (dual detection support)
+            if hasattr(validator, 'metrics1') and hasattr(validator.metrics1, 'figures'):
+                for figure in validator.metrics1.figures:
+                    _log_figure(figure, 0)
+            if hasattr(validator, 'metrics2') and hasattr(validator.metrics2, 'figures'):
+                for figure in validator.metrics2.figures:
+                    _log_figure(figure, 0)
+                    
         if hasattr(trainer, "test_validator"):
             test_validator = trainer.test_validator
-            for figure in test_validator.metrics.figures:
-                _log_figure(figure, 0)
-            for figure in test_validator.final_figures:
-                _log_figure(figure, 0)
+            
+            # Log test figures
+            if hasattr(test_validator, 'final_figures'):
+                for figure in test_validator.final_figures:
+                    _log_figure(figure, 0)
+                    
+            if hasattr(test_validator, 'metrics') and hasattr(test_validator.metrics, 'figures'):
+                for figure in test_validator.metrics.figures:
+                    _log_figure(figure, 0)
+                    
+            # Log dual test class figures (dual detection support)
+            if hasattr(test_validator, 'metrics1') and hasattr(test_validator.metrics1, 'figures'):
+                for figure in test_validator.metrics1.figures:
+                    _log_figure(figure, 0)
+            if hasattr(test_validator, 'metrics2') and hasattr(test_validator.metrics2, 'figures'):
+                for figure in test_validator.metrics2.figures:
+                    _log_figure(figure, 0)
 
 
 callbacks = (

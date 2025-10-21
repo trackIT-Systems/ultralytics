@@ -1923,6 +1923,7 @@ class Albumentations:
         self.p = p
         self.hyp = hyp
         self.transform = None
+        self.is_dual_model = False  # Default value
         prefix = colorstr("albumentations: ")
 
         try:
@@ -2009,9 +2010,14 @@ class Albumentations:
             ]
             # Compose transforms
             self.contains_spatial = any(transform.__class__.__name__ in spatial_transforms for transform in T)
+            
+            # Check if using dual labels based on model parameter and store as class attribute
+            self.is_dual_model = hasattr(hyp, 'model') and hyp.model and 'dual' in str(hyp.model).lower()
+            label_fields = ["cls1", "cls2"] if self.is_dual_model else ["class_labels"]
+            
             self.transform = (
                 A.Compose(T, bbox_params=A.BboxParams(format="yolo", 
-                                                      label_fields=["class_labels"], 
+                                                      label_fields=label_fields, 
                                                       min_visibility=hyp.bbox_min_visibility, 
                                                       clip=True))
                 if self.contains_spatial
@@ -2065,18 +2071,41 @@ class Albumentations:
             return labels
 
         if self.contains_spatial:
-            cls = labels["cls"]
-            if len(cls):
-                labels["instances"].convert_bbox("xywh")
-                labels["instances"].normalize(*im.shape[:2][::-1])
-                bboxes = labels["instances"].bboxes
-                # TODO: add supports of segments and keypoints
-                new = self.transform(image=im, bboxes=bboxes, class_labels=cls)  # transformed
-                if len(new["class_labels"]) > 0:  # skip update if no bbox in new im
-                    labels["img"] = new["image"]
-                    labels["cls"] = np.array(new["class_labels"])
-                    bboxes = np.array(new["bboxes"], dtype=np.float32)
-                labels["instances"].update(bboxes=bboxes)
+            if self.is_dual_model:
+                # Handle dual labels: split cls -> cls1/cls2, transform, then merge back
+                cls = labels["cls"]
+                if len(cls) > 0:
+                    # Split combined cls into cls1 and cls2
+                    cls1 = cls[:, 0]
+                    cls2 = cls[:, 1]
+                    
+                    labels["instances"].convert_bbox("xywh")
+                    labels["instances"].normalize(*im.shape[:2][::-1])
+                    bboxes = labels["instances"].bboxes
+                    # TODO: add supports of segments and keypoints
+                    new = self.transform(image=im, bboxes=bboxes, cls1=cls1, cls2=cls2)  # transformed
+                    if len(new["cls1"]) > 0:  # skip update if no bbox in new im
+                        labels["img"] = new["image"]
+                        # Merge cls1 and cls2 back into cls
+                        cls1_result = np.array(new["cls1"])
+                        cls2_result = np.array(new["cls2"])
+                        labels["cls"] = np.column_stack((cls1_result, cls2_result))
+                        bboxes = np.array(new["bboxes"], dtype=np.float32)
+                    labels["instances"].update(bboxes=bboxes)
+            else:
+                # Handle single labels (class_labels)
+                cls = labels["cls"]
+                if len(cls):
+                    labels["instances"].convert_bbox("xywh")
+                    labels["instances"].normalize(*im.shape[:2][::-1])
+                    bboxes = labels["instances"].bboxes
+                    # TODO: add supports of segments and keypoints
+                    new = self.transform(image=im, bboxes=bboxes, class_labels=cls)  # transformed
+                    if len(new["class_labels"]) > 0:  # skip update if no bbox in new im
+                        labels["img"] = new["image"]
+                        labels["cls"] = np.array(new["class_labels"])
+                        bboxes = np.array(new["bboxes"], dtype=np.float32)
+                    labels["instances"].update(bboxes=bboxes)
         else:
             labels["img"] = self.transform(image=labels["img"])["image"]  # transformed
 
@@ -2215,7 +2244,13 @@ class Format:
                 )
             labels["masks"] = masks
         labels["img"] = self._format_img(img)
-        labels["cls"] = torch.from_numpy(cls) if nl else torch.zeros(nl)
+        # Handle dual classes: preserve original shape [N, 2] for dual detection
+        if nl:
+            labels["cls"] = torch.from_numpy(cls)
+        else:
+            # Infer if dual classes from original shape before any processing
+            is_dual = isinstance(cls, np.ndarray) and cls.ndim == 2 and cls.shape[1] == 2
+            labels["cls"] = torch.zeros((0, 2), dtype=torch.long) if is_dual else torch.zeros(nl)
         labels["bboxes"] = torch.from_numpy(instances.bboxes) if nl else torch.zeros((nl, 4))
         if self.return_keypoint:
             labels["keypoints"] = (
