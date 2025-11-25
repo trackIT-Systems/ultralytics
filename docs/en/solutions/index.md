@@ -29,7 +29,7 @@ Here's our curated list of Ultralytics solutions that can be used to create awes
 - [Object Cropping](../guides/object-cropping.md): Master object cropping with YOLO11 for precise extraction of objects from images and videos.
 - [Object Blurring](../guides/object-blurring.md): Apply object blurring using YOLO11 to protect privacy in image and video processing.
 - [Workouts Monitoring](../guides/workouts-monitoring.md): Discover how to monitor workouts using YOLO11. Learn to track and analyze various fitness routines in real time.
-- [Objects Counting in Regions](../guides/region-counting.md): Count objects in specific regions using YOLO11 for accurate detection in varied areas.
+- [Object Counting in Regions](../guides/region-counting.md): Count objects in specific regions using YOLO11 for accurate detection in varied areas.
 - [Security Alarm System](../guides/security-alarm-system.md): Create a security alarm system with YOLO11 that triggers alerts upon detecting new objects. Customize the system to fit your specific needs.
 - [Heatmaps](../guides/heatmaps.md): Utilize detection heatmaps to visualize data intensity across a matrix, providing clear insights in computer vision tasks.
 - [Instance Segmentation with Object Tracking](../guides/instance-segmentation-and-tracking.md): Implement [instance segmentation](https://www.ultralytics.com/glossary/instance-segmentation) and object tracking with YOLO11 to achieve precise object boundaries and continuous monitoring.
@@ -66,21 +66,20 @@ Here's our curated list of Ultralytics solutions that can be used to create awes
 
 All Ultralytics Solutions use the separate class [`SolutionAnnotator`](https://docs.ultralytics.com/reference/solutions/solutions/#ultralytics.solutions.solutions.SolutionAnnotator), that extends the main [`Annotator`](https://docs.ultralytics.com/reference/utils/plotting/#ultralytics.utils.plotting.Annotator) class, and have the following methods:
 
-| Method                             | Return Type | Description                                                            |
-| ---------------------------------- | ----------- | ---------------------------------------------------------------------- |
-| `draw_region()`                    | `None`      | Draws a region using specified points, colors, and thickness.          |
-| `queue_counts_display()`           | `None`      | Displays queue counts in the specified region.                         |
-| `display_analytics()`              | `None`      | Displays overall statistics for parking lot management.                |
-| `estimate_pose_angle()`            | `float`     | Calculates the angle between three points in an object pose.           |
-| `draw_specific_points()`           | `None`      | Draws specific keypoints on the image.                                 |
-| `plot_workout_information()`       | `None`      | Draws a labeled text box on the image.                                 |
-| `plot_angle_and_count_and_stage()` | `None`      | Visualizes angle, step count, and stage for workout monitoring.        |
-| `plot_distance_and_line()`         | `None`      | Displays the distance between centroids and connects them with a line. |
-| `display_objects_labels()`         | `None`      | Annotates bounding boxes with object class labels.                     |
-| `seg_bbox()`                       | `None`      | Draws contours for segmented objects and optionally labels them.       |
-| `visioneye()`                      | `None`      | Maps and connects object centroids to a visual "eye" point.            |
-| `circle_label()`                   | `None`      | Draws a circular label in the place of a bounding box.                 |
-| `text_label()`                     | `None`      | Draws a rectangular label in the place of a bounding box.              |
+| Method                             | Return Type | Description                                                                      |
+| ---------------------------------- | ----------- | -------------------------------------------------------------------------------- |
+| `draw_region()`                    | `None`      | Draws a region using specified points, colors, and thickness.                    |
+| `queue_counts_display()`           | `None`      | Displays queue counts in the specified region.                                   |
+| `display_analytics()`              | `None`      | Displays overall statistics for parking lot management.                          |
+| `estimate_pose_angle()`            | `float`     | Calculates the angle between three points in an object pose.                     |
+| `draw_specific_points()`           | `None`      | Draws specific keypoints on the image.                                           |
+| `plot_workout_information()`       | `None`      | Draws a labeled text box on the image.                                           |
+| `plot_angle_and_count_and_stage()` | `None`      | Visualizes angle, step count, and stage for workout monitoring.                  |
+| `plot_distance_and_line()`         | `None`      | Displays the distance between centroids and connects them with a line.           |
+| `display_objects_labels()`         | `None`      | Annotates bounding boxes with object class labels.                               |
+| `sweep_annotator()`                | `None`      | Visualize a vertical sweep line and optional label.                              |
+| `visioneye()`                      | `None`      | Maps and connects object centroids to a visual "eye" point.                      |
+| `adaptive_label()`                 | `None`      | Draw a circular or rectangle background shape label in center of a bounding box. |
 
 ### Working with SolutionResults
 
@@ -155,7 +154,7 @@ For more details, refer to the [`SolutionResults` class documentation](https://d
 ```bash
 yolo solutions count show=True # for object counting
 
-yolo solutions source="path/to/video.mp4" # specify video file path
+yolo solutions count source="path/to/video.mp4" # specify video file path
 ```
 
 ### Contribute to Our Solutions

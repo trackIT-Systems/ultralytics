@@ -30,6 +30,22 @@ td {
 }
 /* Table format like GitHub ----------------------------------------------------------------------------------------- */
 
+/* Ensure in-page anchors account for sticky header/nav height to fix Zensical bug of clicked header behind nav bar*/
+:root {
+  --anchor-offset: 140px;
+}
+html {
+  scroll-padding-top: var(--anchor-offset);
+}
+.md-typeset :is(h1, h2, h3, h4, h5, h6)[id] {
+  scroll-margin-top: var(--anchor-offset);
+}
+@media (max-width: 768px) {
+  :root {
+    --anchor-offset: 110px;
+  }
+}
+
 /* Code block vertical scroll */
 div.highlight {
   max-height: 20rem;
@@ -48,9 +64,10 @@ div.highlight {
 
 /* Banner ----------------------------------------------------------------------------------------------------------- */
 .md-banner {
-  background-image: url(https://github.com/ultralytics/docs/releases/download/0/announcement_bar_yolo11.avif);
+  background-image: url(https://cdn.prod.website-files.com/680a070c3b99253410dd3dcf/691dac3414d0280ebe3e5fda_bg.avif);
   background-size: cover;
   background-position: center;
+  background-repeat: no-repeat;
 }
 .md-banner__inner {
   margin-top: 0 !important;
@@ -67,27 +84,46 @@ div.highlight {
   flex-direction: column;
 }
 .banner-wrapper {
-  padding: 16px;
+  padding: 40px 0px;
 }
 .banner-wrapper > .banner-content-wrapper {
-  gap: 4px;
+  gap: 0.75rem;
 }
-.banner-wrapper > .banner-content-wrapper > p {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 500;
+.banner-wrapper > .banner-content-wrapper > img {
+  height: 30px;
+}
+.banner-wrapper > .banner-content-wrapper > .vc-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+}
+.banner-wrapper > .banner-content-wrapper > .vc-wrapper > img {
+  height: 20px;
 }
 @media screen and (min-width: 768px) {
+  .md-banner {
+    height: 68px;
+  }
   .banner-wrapper,
   .banner-wrapper > .banner-content-wrapper {
     flex-direction: row;
   }
   .banner-wrapper {
-    padding: 12px;
+    padding: 14px 16px;
   }
   .banner-wrapper > .banner-content-wrapper {
-    gap: 16px;
+    gap: 1.25rem;
     margin: 0 auto;
+  }
+  .banner-wrapper > .banner-content-wrapper > img {
+    height: 40px;
+  }
+  .banner-wrapper > .banner-content-wrapper > .vc-wrapper {
+    gap: 0.5rem;
+  }
+  .banner-wrapper > .banner-content-wrapper > .vc-wrapper > img {
+    height: 28px;
   }
 }
 /* Banner ----------------------------------------------------------------------------------------------------------- */
@@ -104,7 +140,7 @@ div.highlight {
 }
 .git-info {
   font-size: 0.8em;
-  color: grey;
+  color: gray;
   margin-bottom: 10px;
 }
 .dates-container,
@@ -181,12 +217,16 @@ div.highlight {
 }
 /* MkDocs Ultralytics Plugin ---------------------------------------------------------------------------------------- */
 
-/* Inkeep ----------------------------------------------------------------------------------------------------------- */
-#inkeepSearchBar {
-  transition: all 0.2s ease-in-out;
+/* Logo switching for light/dark mode ------------------------------------------------------------------------------- */
+[data-md-color-scheme="default"] .md-header__button.md-logo img {
+  content: url("https://cdn.prod.website-files.com/680a070c3b99253410dd3dcf/68e4eb1e9893320b26cc02c3_Ultralytics%20Logo.png.svg");
 }
-#inkeepSearchBar:hover {
-  transform: scale(1.1);
-  filter: brightness(1.2);
+[data-md-color-scheme="slate"] .md-header__button.md-logo img {
+  content: url("https://raw.githubusercontent.com/ultralytics/assets/main/logo/Ultralytics_Logotype_Reverse.svg");
 }
-/* Inkeep ----------------------------------------------------------------------------------------------------------- */
+/* Logo switching for light/dark mode ------------------------------------------------------------------------------- */
+
+/* Remove underlines from links */
+.md-typeset a {
+  text-decoration: none !important;
+}
