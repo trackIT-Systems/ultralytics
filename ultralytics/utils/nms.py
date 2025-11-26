@@ -26,6 +26,7 @@ def non_max_suppression(
     rotated: bool = False,
     end2end: bool = False,
     return_idxs: bool = False,
+    dual_classes: tuple | None = None,  # (nc1, nc2) for dual classification heads
 ):
     """Perform non-maximum suppression (NMS) on prediction results.
 
@@ -49,10 +50,14 @@ def non_max_suppression(
         rotated (bool): Whether to handle Oriented Bounding Boxes (OBB).
         end2end (bool): Whether the model is end-to-end and doesn't require NMS.
         return_idxs (bool): Whether to return the indices of kept detections.
+        dual_classes (tuple, optional): Tuple (nc1, nc2) for dual classification heads. When provided,
+            processes dual classification heads separately and returns 8 values per detection:
+            (x1, y1, x2, y2, conf1, cls1, conf2, cls2).
 
     Returns:
-        output (list[torch.Tensor]): List of detections per image with shape (num_boxes, 6 + num_masks) containing (x1,
-            y1, x2, y2, confidence, class, mask1, mask2, ...).
+        output (List[torch.Tensor]): List of detections per image with shape:
+            - Standard: (num_boxes, 6 + num_masks) containing (x1, y1, x2, y2, confidence, class, mask1, mask2, ...)
+            - Dual: (num_boxes, 8 + num_masks) containing (x1, y1, x2, y2, conf1, cls1, conf2, cls2, mask1, ...)
         keepi (list[torch.Tensor]): Indices of kept detections if return_idxs=True.
     """
     # Checks
@@ -70,7 +75,14 @@ def non_max_suppression(
         return output
 
     bs = prediction.shape[0]  # batch size (BCN, i.e. 1,84,6300)
-    nc = nc or (prediction.shape[1] - 4)  # number of classes
+    
+    # Handle dual classes
+    is_dual = dual_classes is not None
+    if is_dual:
+        nc1, nc2 = dual_classes
+        nc = nc1 + nc2  # total number of classes
+    else:
+        nc = nc or (prediction.shape[1] - 4)  # number of classes
     extra = prediction.shape[1] - nc - 4  # number of extra info
     mi = 4 + nc  # mask start index
     xc = prediction[:, 4:mi].amax(1) > conf_thres  # candidates
@@ -86,7 +98,8 @@ def non_max_suppression(
         prediction[..., :4] = xywh2xyxy(prediction[..., :4])  # xywh to xyxy
 
     t = time.time()
-    output = [torch.zeros((0, 6 + extra), device=prediction.device)] * bs
+    output_dims = 8 + extra if is_dual else 6 + extra  # 8 for dual (4 bbox + 2 conf + 2 cls), 6 for standard
+    output = [torch.zeros((0, output_dims), device=prediction.device)] * bs
     keepi = [torch.zeros((0, 1), device=prediction.device)] * bs  # to store the kept idxs
     for xi, (x, xk) in enumerate(zip(prediction, xinds)):  # image index, (preds, preds indices)
         # Apply constraints
@@ -110,22 +123,53 @@ def non_max_suppression(
 
         # Detections matrix nx6 (xyxy, conf, cls)
         box, cls, mask = x.split((4, nc, extra), 1)
-
-        if multi_label:
-            i, j = torch.where(cls > conf_thres)
-            x = torch.cat((box[i], x[i, 4 + j, None], j[:, None].float(), mask[i]), 1)
-            if return_idxs:
-                xk = xk[i]
-        else:  # best class only
-            conf, j = cls.max(1, keepdim=True)
-            filt = conf.view(-1) > conf_thres
-            x = torch.cat((box, conf, j.float(), mask), 1)[filt]
-            if return_idxs:
-                xk = xk[filt]
+        
+        if is_dual:
+            # Split dual classification heads
+            cls1, cls2 = cls.split((nc1, nc2), 1)
+            
+            if multi_label:
+                # Multi-label not fully implemented for dual classes yet
+                # Fall back to best class approach for now
+                
+                i, j = torch.where(cls1 > conf_thres)
+                x = torch.cat((box[i], x[i, 4 + j, None], j[:, None].float(), mask[i]), 1)
+                if return_idxs:
+                    xk = xk[i]
+            else:  # best class only for each head
+                conf1, j1 = cls1.max(1, keepdim=True)
+                conf2, j2 = cls2.max(1, keepdim=True)
+                
+                # Use only conf1 for filtering
+                filt = conf1.view(-1) > conf_thres
+                
+                # Output format: [x1, y1, x2, y2, conf1, cls1, conf2, cls2, mask...]
+                x = torch.cat((box, conf1, j1.float(), conf2, j2.float(), mask), 1)[filt]
+                if return_idxs:
+                    xk = xk[filt]
+        else:
+            # Standard single classification head processing
+            if multi_label:
+                i, j = torch.where(cls > conf_thres)
+                x = torch.cat((box[i], x[i, 4 + j, None], j[:, None].float(), mask[i]), 1)
+                if return_idxs:
+                    xk = xk[i]
+            else:  # best class only
+                conf, j = cls.max(1, keepdim=True)
+                filt = conf.view(-1) > conf_thres
+                x = torch.cat((box, conf, j.float(), mask), 1)[filt]
+                if return_idxs:
+                    xk = xk[filt]
 
         # Filter by class
         if classes is not None:
-            filt = (x[:, 5:6] == classes).any(1)
+            if is_dual:
+                # For dual classes, check both heads
+                filt1 = (x[:, 5:6] == classes).any(1)  # cls1 matches
+                filt2 = (x[:, 7:8] == classes).any(1)  # cls2 matches
+                filt = filt1 | filt2  # either head matches
+            else:
+                filt = (x[:, 5:6] == classes).any(1)
             x = x[filt]
             if return_idxs:
                 xk = xk[filt]
@@ -135,13 +179,22 @@ def non_max_suppression(
         if not n:  # no boxes
             continue
         if n > max_nms:  # excess boxes
-            filt = x[:, 4].argsort(descending=True)[:max_nms]  # sort by confidence and remove excess boxes
+            if is_dual:
+                # Sort by conf1 only
+                filt = x[:, 4].argsort(descending=True)[:max_nms]  # sort by conf1
+            else:
+                filt = x[:, 4].argsort(descending=True)[:max_nms]  # sort by confidence and remove excess boxes
             x = x[filt]
             if return_idxs:
                 xk = xk[filt]
 
-        c = x[:, 5:6] * (0 if agnostic else max_wh)  # classes
-        scores = x[:, 4]  # scores
+        if is_dual:
+            # Use conf1 and cls1 for NMS grouping and scoring
+            c = x[:, 5:6] * (0 if agnostic else max_wh)  # use cls1 for NMS grouping
+            scores = x[:, 4]  # use conf1 for NMS scoring
+        else:
+            c = x[:, 5:6] * (0 if agnostic else max_wh)  # classes
+            scores = x[:, 4]  # scores
         if rotated:
             boxes = torch.cat((x[:, :2] + c, x[:, 2:4], x[:, -1:]), dim=-1)  # xywhr
             i = TorchNMS.fast_nms(boxes, scores, iou_thres, iou_func=batch_probiou)
