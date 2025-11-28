@@ -64,7 +64,7 @@ def _log_tensorboard_graph(trainer) -> None:
     imgsz = trainer.args.imgsz
     imgsz = (imgsz, imgsz) if isinstance(imgsz, int) else imgsz
     p = next(trainer.model.parameters())  # for device, type
-    im = torch.zeros((1, 3, *imgsz), device=p.device, dtype=p.dtype)  # input image (must be zeros, not empty)
+    im = torch.zeros((1, trainer.data["channels"], *imgsz), device=p.device, dtype=p.dtype)  # input image (must be zeros, not empty)
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=UserWarning)  # suppress jit trace warning
