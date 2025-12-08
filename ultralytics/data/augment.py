@@ -870,43 +870,45 @@ class MixUp(BaseMixTransform):
         """
         labels2 = labels["mix_labels"][0]
         
-        # Check speaker count if speaker data is present
-        # Skip MixUp if combined speakers would exceed 4
-        speakers1 = set(labels.get("bbox_speaker_map", {}).values())
-        speakers2 = set(labels2.get("bbox_speaker_map", {}).values())
-        combined_speakers = speakers1 | speakers2
+        segments2 = labels2.get("speaker_segments", [])
         
-        if len(combined_speakers) > 4:
-            # Too many speakers, skip MixUp and return original labels
+        # Rename speakers from second file to avoid naming collisions
+        # Each file numbers speakers independently (spk0, spk1, etc.)
+        speaker_rename_map = {}
+        renamed_segments2 = []
+        for seg in segments2:
+            speaker = seg.get("speaker", "")
+            if speaker not in speaker_rename_map:
+                speaker_rename_map[speaker] = f"B_{speaker}"
+            renamed_segments2.append({
+                "start": seg.get("start", 0),
+                "end": seg.get("end", 0),
+                "speaker": speaker_rename_map[speaker]
+            })
+        
+        # Check speaker count - skip MixUp if combined would exceed 4
+        speakers1 = set(seg.get('speaker', '') for seg in labels.get("speaker_segments", []))
+        speakers2 = set(seg.get('speaker', '') for seg in renamed_segments2)
+        if len(speakers1 | speakers2) > 4:
             return labels
         
+        # Standard MixUp operations
         r = np.random.beta(32.0, 32.0)  # mixup ratio, alpha=beta=32.0
         #labels["img"] = (labels["img"] * r + labels2["img"] * (1 - r)).astype(np.uint8)
         labels["img"] = np.maximum(labels["img"], labels2["img"]).astype(np.uint8)
         labels["instances"] = Instances.concatenate([labels["instances"], labels2["instances"]], axis=0)
         labels["cls"] = np.concatenate([labels["cls"], labels2["cls"]], 0)
         
-        # Merge speaker data if present
-        if "bbox_speaker_map" in labels or "bbox_speaker_map" in labels2:
-            # Merge bbox_speaker_map - offset indices for second label
-            merged_bbox_speaker_map = labels.get("bbox_speaker_map", {}).copy()
-            offset = len(labels.get("instances", []))  # Number of bboxes in first label before merge
-            for idx, speaker in labels2.get("bbox_speaker_map", {}).items():
-                merged_bbox_speaker_map[idx + offset] = speaker
-            labels["bbox_speaker_map"] = merged_bbox_speaker_map
-            
-            # Merge speaker_segments (combine unique segments from both)
-            segments1 = labels.get("speaker_segments", [])
-            segments2 = labels2.get("speaker_segments", [])
-            # Simple merge - concatenate and deduplicate by (speaker, start, end)
-            seen = set()
-            merged_segments = []
-            for seg in segments1 + segments2:
-                key = (seg.get("speaker"), seg.get("start"), seg.get("end"))
-                if key not in seen:
-                    seen.add(key)
-                    merged_segments.append(seg)
-            labels["speaker_segments"] = merged_segments
+        # Merge speaker_segments
+        segments1 = labels.get("speaker_segments", [])
+        seen = set()
+        merged_segments = []
+        for seg in segments1 + renamed_segments2:
+            key = (seg.get("speaker"), seg.get("start"), seg.get("end"))
+            if key not in seen:
+                seen.add(key)
+                merged_segments.append(seg)
+        labels["speaker_segments"] = merged_segments
         
         return labels
 
