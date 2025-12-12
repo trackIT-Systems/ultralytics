@@ -95,10 +95,11 @@ def _log_tensorboard_graph(trainer) -> None:
 
 def _log_tensorboard_histogram(trainer):
     if WRITER:
-        for _, (name, param) in enumerate(trainer.model.named_parameters()):
+        for _, (name, param) in enumerate(torch_utils.unwrap_model(trainer.model).named_parameters()):
             name_parts: str = name.split('.')
-            module = ".".join(name_parts[:3])
-            layer = ".".join(name_parts[3:])
+            split_id = 3 if len(name_parts) == 5 else 2
+            module = ".".join(name_parts[:split_id])
+            layer = ".".join(name_parts[split_id:])
             WRITER.add_histogram(tag=f"{module}/{layer}", values=param, global_step=trainer.epoch + 1)
             
 def on_pretrain_routine_start(trainer) -> None:
