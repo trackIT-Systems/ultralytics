@@ -213,6 +213,12 @@ class v8DetectionLoss:
         self.assigner = TaskAlignedAssigner(topk=tal_topk, num_classes=self.nc, alpha=0.5, beta=6.0)
         self.bbox_loss = BboxLoss(m.reg_max).to(device)
         self.proj = torch.arange(m.reg_max, dtype=torch.float, device=device)
+        
+        # Sequence-aware loss parameters (experimental)
+        self.use_sequence_loss = getattr(h, 'use_sequence_loss', False)  # Enable/disable sequence loss
+        self.sequence_loss_weight = getattr(h, 'sequence_loss_weight', 0.5)  # 0.5-2.0 recommended (now properly scaled)
+        self.sequence_mode = getattr(h, 'sequence_mode', 'class')  # 'class' or 'speaker'
+        self.sequence_loss_type = getattr(h, 'sequence_loss_type', 'smoothness')  # 'variance', 'consensus', 'smoothness'
 
     def preprocess(self, targets: torch.Tensor, batch_size: int, scale_tensor: torch.Tensor) -> torch.Tensor:
         """Preprocess targets by converting to tensor format and scaling coordinates."""
@@ -239,10 +245,211 @@ class v8DetectionLoss:
             # pred_dist = pred_dist.view(b, a, c // 4, 4).transpose(2,3).softmax(3).matmul(self.proj.type(pred_dist.dtype))
             # pred_dist = (pred_dist.view(b, a, c // 4, 4).softmax(2) * self.proj.type(pred_dist.dtype).view(1, 1, -1, 1)).sum(2)
         return dist2bbox(pred_dist, anchor_points, xywh=False)
+    
+    def _aggregate_gt_predictions(
+        self,
+        pred_scores: torch.Tensor,
+        pred_bboxes: torch.Tensor,
+        target_scores: torch.Tensor,
+        target_gt_idx: torch.Tensor,
+        fg_mask: torch.Tensor,
+        gt_labels: torch.Tensor,
+        gt_bboxes: torch.Tensor,
+        mask_gt: torch.Tensor,
+    ) -> list[dict[str, torch.Tensor] | None]:
+        """Aggregate per-anchor predictions into one logit/bbox per ground-truth box."""
+        batch_data = []
+        dtype = pred_scores.dtype
+
+        for batch_idx in range(pred_scores.shape[0]):
+            valid_gt_mask = mask_gt[batch_idx, :, 0].bool()
+            gt_indices = torch.nonzero(valid_gt_mask).squeeze(-1)
+
+            entries_logits, entries_bboxes, entries_labels, entries_gt_idx = [], [], [], []
+
+            for gt_idx in gt_indices:
+                anchor_mask = fg_mask[batch_idx] & (target_gt_idx[batch_idx] == gt_idx)
+                if not anchor_mask.any():
+                    continue
+
+                anchor_ids = torch.nonzero(anchor_mask).squeeze(-1)
+                anchor_weights = target_scores[batch_idx, anchor_ids].max(dim=1).values.to(dtype)
+                anchor_weights = anchor_weights.clamp_min(1e-6)
+
+                weights_sum = anchor_weights.sum()
+                logits = (pred_scores[batch_idx, anchor_ids] * anchor_weights[:, None]).sum(0) / weights_sum
+                bbox = (pred_bboxes[batch_idx, anchor_ids] * anchor_weights[:, None]).sum(0) / weights_sum
+
+                entries_logits.append(logits)
+                entries_bboxes.append(bbox)
+                entries_labels.append(int(gt_labels[batch_idx, gt_idx, 0].item()))
+                entries_gt_idx.append(int(gt_idx.item()))
+
+            if entries_logits:
+                batch_data.append(
+                    {
+                        "logits": torch.stack(entries_logits),
+                        "bboxes": torch.stack(entries_bboxes),
+                        "labels": torch.tensor(entries_labels, device=self.device, dtype=torch.long),
+                        "gt_indices": torch.tensor(entries_gt_idx, device=self.device, dtype=torch.long),
+                    }
+                )
+            else:
+                batch_data.append(None)
+
+        return batch_data
+
+    def _build_sequences(
+        self, aggregated: list[dict[str, torch.Tensor] | None], mode: str, bbox_speaker_map: dict
+    ) -> list[tuple[int, torch.Tensor, int]]:
+        """Create sequences of GT-level predictions grouped by class or speaker."""
+        sequences = []
+
+        for batch_idx, data in enumerate(aggregated):
+            if data is None:
+                continue
+
+            labels = data["labels"]
+            gt_indices = data["gt_indices"]
+
+            if mode == "speaker" and bbox_speaker_map:
+                speaker_groups: dict[int, list[int]] = {}
+                for local_i, gt_idx in enumerate(gt_indices.tolist()):
+                    speaker_id = bbox_speaker_map.get((batch_idx, gt_idx))
+                    if speaker_id is None:
+                        continue
+                    speaker_groups.setdefault(speaker_id, []).append(local_i)
+
+                for idxs in speaker_groups.values():
+                    if len(idxs) >= 2:
+                        lbl = labels[idxs].mode()[0].item()
+                        sequences.append((batch_idx, torch.tensor(idxs, device=self.device), int(lbl)))
+
+                # Fallback to class grouping if no valid speaker sequences
+                if sequences:
+                    continue
+
+            unique_labels = labels.unique()
+            for lbl in unique_labels:
+                idxs = torch.nonzero(labels == lbl, as_tuple=False).squeeze(-1)
+                if idxs.numel() >= 2:
+                    sequences.append((batch_idx, idxs, int(lbl.item())))
+
+        return sequences
+
+    def _variance_loss(
+        self, aggregated: list[dict[str, torch.Tensor] | None], sequences: list[tuple[int, torch.Tensor, int]], normalizer: torch.Tensor
+    ) -> torch.Tensor:
+        """Variance-based consistency on GT-class probabilities."""
+        if not sequences:
+            return torch.tensor(0.0, device=self.device)
+
+        total_loss = torch.tensor(0.0, device=self.device)
+        total_items = 0
+
+        for batch_idx, idxs, gt_class in sequences:
+            data = aggregated[batch_idx]
+            seq_logits = data["logits"][idxs]
+            target = torch.zeros_like(seq_logits)
+            target[:, gt_class] = 1.0
+
+            bce_loss = self.bce(seq_logits, target).sum()
+            probs = seq_logits[:, gt_class].sigmoid()
+            variance = probs.var(unbiased=False)
+
+            total_loss += bce_loss + variance * seq_logits.shape[0]
+            total_items += seq_logits.shape[0]
+
+        return total_loss / torch.maximum(normalizer, torch.tensor(1.0, device=self.device))
+
+    def _consensus_loss(
+        self, aggregated: list[dict[str, torch.Tensor] | None], sequences: list[tuple[int, torch.Tensor, int]], normalizer: torch.Tensor
+    ) -> torch.Tensor:
+        """Consensus loss using mean probability consistency for the GT class."""
+        if not sequences:
+            return torch.tensor(0.0, device=self.device)
+
+        total_loss = torch.tensor(0.0, device=self.device)
+        total_items = 0
+
+        for batch_idx, idxs, gt_class in sequences:
+            data = aggregated[batch_idx]
+            seq_logits = data["logits"][idxs]
+            target = torch.zeros_like(seq_logits)
+            target[:, gt_class] = 1.0
+
+            bce_loss = self.bce(seq_logits, target).sum()
+            probs = seq_logits[:, gt_class].sigmoid()
+            mean_prob = probs.mean()
+            consistency = torch.pow(probs - mean_prob, 2).sum()
+
+            total_loss += bce_loss + consistency
+            total_items += seq_logits.shape[0]
+
+        return total_loss / torch.maximum(normalizer, torch.tensor(1.0, device=self.device))
+
+    def _smoothness_loss(
+        self, aggregated: list[dict[str, torch.Tensor] | None], sequences: list[tuple[int, torch.Tensor, int]], normalizer: torch.Tensor
+    ) -> torch.Tensor:
+        """Temporal smoothness over GT-level predictions ordered by x-center."""
+        if not sequences:
+            return torch.tensor(0.0, device=self.device)
+
+        total_loss = torch.tensor(0.0, device=self.device)
+        total_items = 0
+
+        for batch_idx, idxs, gt_class in sequences:
+            data = aggregated[batch_idx]
+            seq_logits = data["logits"][idxs]
+            seq_boxes = data["bboxes"][idxs]
+
+            x_centers = (seq_boxes[:, 0] + seq_boxes[:, 2]) / 2
+            order = torch.argsort(x_centers)
+            seq_logits = seq_logits[order]
+
+            target = torch.zeros_like(seq_logits)
+            target[:, gt_class] = 1.0
+
+            bce_loss = self.bce(seq_logits, target).sum()
+            probs = seq_logits[:, gt_class].sigmoid()
+            smoothness = torch.pow(probs[1:] - probs[:-1], 2).sum()
+
+            total_loss += bce_loss + smoothness * seq_logits.shape[0]
+            total_items += seq_logits.shape[0]
+
+        return total_loss / torch.maximum(normalizer, torch.tensor(1.0, device=self.device))
+
+    def compute_sequence_loss(
+        self,
+        pred_scores: torch.Tensor,
+        pred_bboxes: torch.Tensor,
+        target_scores: torch.Tensor,
+        target_gt_idx: torch.Tensor,
+        fg_mask: torch.Tensor,
+        gt_labels: torch.Tensor,
+        gt_bboxes: torch.Tensor,
+        mask_gt: torch.Tensor,
+        batch: dict[str, torch.Tensor],
+        target_scores_sum: torch.Tensor,
+    ) -> torch.Tensor:
+        """Compute sequence-aware loss on aggregated GT-level predictions."""
+        aggregated = self._aggregate_gt_predictions(
+            pred_scores, pred_bboxes, target_scores, target_gt_idx, fg_mask, gt_labels, gt_bboxes, mask_gt
+        )
+
+        bbox_speaker_map = batch.get("bbox_speaker_map", {})
+        sequences = self._build_sequences(aggregated, self.sequence_mode, bbox_speaker_map)
+
+        if self.sequence_loss_type == "variance":
+            return self._variance_loss(aggregated, sequences, target_scores_sum)
+        elif self.sequence_loss_type == "consensus":
+            return self._consensus_loss(aggregated, sequences, target_scores_sum)
+        else:
+            return self._smoothness_loss(aggregated, sequences, target_scores_sum)
 
     def __call__(self, preds: Any, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
-        """Calculate the sum of the loss for box, cls and dfl multiplied by batch size."""
-        loss = torch.zeros(3, device=self.device)  # box, cls, dfl
+        """Calculate the sum of the loss for box, cls, dfl and sequence multiplied by batch size."""
+        loss = torch.zeros(4, device=self.device)  # box, cls, dfl, sequence
         feats = preds[1] if isinstance(preds, tuple) else preds
         pred_distri, pred_scores = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
             (self.reg_max * 4, self.nc), 1
@@ -267,7 +474,7 @@ class v8DetectionLoss:
         # dfl_conf = pred_distri.view(batch_size, -1, 4, self.reg_max).detach().softmax(-1)
         # dfl_conf = (dfl_conf.amax(-1).mean(-1) + dfl_conf.amax(-1).amin(-1)) / 2
 
-        _, target_bboxes, target_scores, fg_mask, _ = self.assigner(
+        target_labels, target_bboxes, target_scores, fg_mask, target_gt_idx = self.assigner(
             # pred_scores.detach().sigmoid() * 0.8 + dfl_conf.unsqueeze(-1) * 0.2,
             pred_scores.detach().sigmoid(),
             (pred_bboxes.detach() * stride_tensor).type(gt_bboxes.dtype),
@@ -277,7 +484,7 @@ class v8DetectionLoss:
             mask_gt,
         )
 
-        target_scores_sum = max(target_scores.sum(), 1)
+        target_scores_sum = torch.maximum(target_scores.sum(), torch.tensor(1.0, device=self.device, dtype=dtype))
 
         # Cls loss
         # loss[1] = self.varifocal_loss(pred_scores, target_scores, target_labels) / target_scores_sum  # VFL way
@@ -295,11 +502,28 @@ class v8DetectionLoss:
                 fg_mask,
             )
 
+        # Sequence-aware loss (experimental)
+        if self.use_sequence_loss and fg_mask.sum():
+            loss[3] = self.compute_sequence_loss(
+                pred_scores,
+                pred_bboxes,
+                target_scores,  # Use assigned target scores instead of gt_labels
+                target_gt_idx,
+                fg_mask,
+                gt_labels,
+                gt_bboxes,
+                mask_gt,
+                batch,
+                target_scores_sum,
+            )
+        
         loss[0] *= self.hyp.box  # box gain
         loss[1] *= self.hyp.cls  # cls gain
         loss[2] *= self.hyp.dfl  # dfl gain
+        if self.use_sequence_loss:
+            loss[3] *= self.sequence_loss_weight  # sequence gain
 
-        return loss * batch_size, loss.detach()  # loss(box, cls, dfl)
+        return loss * batch_size, loss.detach()  # loss(box, cls, dfl, sequence)
 
 
 class v8SegmentationLoss(v8DetectionLoss):
