@@ -684,7 +684,7 @@ def plot_images(
     fname: str = "images.jpg",
     names: dict[int, str] | None = None,
     on_plot: Callable | None = None,
-    max_size: int = 1920,
+    max_size: int = 4800,#1920,
     max_subplots: int = 16,
     save: bool = True,
     conf_thres: float = 0.25,
@@ -738,6 +738,15 @@ def plot_images(
 
     # Handle 2-ch and n-ch images
     c = images.shape[1]
+    if c >= 6:
+        # Expect spectrogram + freq info + 4 speaker masks; collapse masks into a single channel
+        weights = np.array([1.0, 0.75, 0.5, 0.25], dtype=images.dtype).reshape(1, 4, 1, 1)
+        spec = images[:, 0:1]
+        freq = images[:, 1:2]
+        speaker_masks = images[:, 2:6]
+        merged_mask = (speaker_masks * weights).max(axis=1, keepdims=True)  # distinct per-speaker levels for contrast
+        images = np.concatenate((spec, freq, merged_mask), axis=1)
+        c = images.shape[1]
     if c == 2:
         zero = np.zeros_like(images[:, :1])
         images = np.concatenate((images, zero), axis=1)  # pad 2-ch with a black channel
