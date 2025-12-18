@@ -43,6 +43,7 @@ from ultralytics.nn.modules import (
     Conv,
     Conv2,
     ConvTranspose,
+    CoordConv,
     Detect,
     DWConv,
     DWConvTranspose2d,
@@ -63,6 +64,9 @@ from ultralytics.nn.modules import (
     RTDETRDecoder,
     SCDown,
     Segment,
+    SeparableConv2d,
+    TemporalC2PSA,
+    TemporalDilatedSPPF,
     TorchVision,
     WorldDetect,
     YOLOEDetect,
@@ -1524,6 +1528,7 @@ def parse_model(d, ch, verbose=True):
             Classify,
             Conv,
             ConvTranspose,
+            CoordConv,
             GhostConv,
             Bottleneck,
             GhostBottleneck,
@@ -1555,6 +1560,9 @@ def parse_model(d, ch, verbose=True):
             SCDown,
             C2fCIB,
             A2C2f,
+            SeparableConv2d,
+            TemporalDilatedSPPF,
+            TemporalC2PSA,
         }
     )
     repeat_modules = frozenset(  # modules with 'repeat' arguments
@@ -1574,6 +1582,7 @@ def parse_model(d, ch, verbose=True):
             C2fCIB,
             C2PSA,
             A2C2f,
+            TemporalC2PSA,
         }
     )
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args

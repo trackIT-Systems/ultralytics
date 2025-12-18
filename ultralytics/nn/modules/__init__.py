@@ -58,6 +58,10 @@ from .block import (
     RepVGGDW,
     ResNetLayer,
     SCDown,
+    TemporalAttention,
+    TemporalC2PSA,
+    TemporalDilatedSPPF,
+    TemporalPSABlock,
     TorchVision,
 )
 from .conv import (
@@ -67,6 +71,7 @@ from .conv import (
     Conv,
     Conv2,
     ConvTranspose,
+    CoordConv,
     DWConv,
     DWConvTranspose2d,
     Focus,
@@ -74,6 +79,7 @@ from .conv import (
     Index,
     LightConv,
     RepConv,
+    SeparableConv2d,
     SpatialAttention,
 )
 from .head import (
@@ -142,6 +148,7 @@ __all__ = (
     "Conv",
     "Conv2",
     "ConvTranspose",
+    "CoordConv",
     "DWConv",
     "DWConvTranspose2d",
     "DeformableTransformerDecoder",
@@ -170,7 +177,12 @@ __all__ = (
     "ResNetLayer",
     "SCDown",
     "Segment",
+    "SeparableConv2d",
     "SpatialAttention",
+    "TemporalAttention",
+    "TemporalC2PSA",
+    "TemporalDilatedSPPF",
+    "TemporalPSABlock",
     "TorchVision",
     "TransformerBlock",
     "TransformerEncoderLayer",

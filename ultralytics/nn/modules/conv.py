@@ -16,6 +16,7 @@ __all__ = (
     "Conv",
     "Conv2",
     "ConvTranspose",
+    "CoordConv",
     "DWConv",
     "DWConvTranspose2d",
     "Focus",
@@ -23,6 +24,7 @@ __all__ = (
     "Index",
     "LightConv",
     "RepConv",
+    "SeparableConv2d",
     "SpatialAttention",
 )
 
@@ -667,3 +669,138 @@ class Index(nn.Module):
             (torch.Tensor): Selected tensor.
         """
         return x[self.index]
+
+
+class CoordConv(nn.Module):
+    """Add coordinate channels to input for positional awareness.
+
+    For bat spectrograms:
+    - Y coordinate: normalized frequency (0 to 1 from bottom to top)
+    - X coordinate: normalized time (0 to 1 from left to right)
+
+    This helps the model learn "frequency-specific" patterns where features
+    at specific frequencies correspond to specific species.
+
+    Attributes:
+        conv (Conv): Convolution layer that processes input + coordinate channels.
+        with_r (bool): Whether to add radial coordinate channel.
+    """
+
+    def __init__(self, c1: int, c2: int, k: int = 1, s: int = 1, p: int | None = None, g: int = 1, d: int = 1, act: bool = True, with_r: bool = False):
+        """Initialize CoordConv layer with coordinate channel augmentation.
+
+        Args:
+            c1 (int): Number of input channels.
+            c2 (int): Number of output channels.
+            k (int): Kernel size.
+            s (int): Stride.
+            p (int | None): Padding.
+            g (int): Groups.
+            d (int): Dilation.
+            act (bool): Whether to use activation function.
+            with_r (bool): Whether to add radial coordinate (not needed for spectrograms).
+        """
+        super().__init__()
+        coord_channels = 3 if with_r else 2  # x, y (and optionally r)
+        self.conv = Conv(c1 + coord_channels, c2, k, s, p, g, d, act)
+        self.with_r = with_r
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply convolution with coordinate channels to input tensor.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (B, C, H, W).
+
+        Returns:
+            (torch.Tensor): Output tensor after coordinate-aware convolution.
+        """
+        b, _, h, w = x.shape
+
+        # Create coordinate grids using meshgrid (torch.compile friendly)
+        yy_range = torch.arange(h, dtype=x.dtype, device=x.device)
+        xx_range = torch.arange(w, dtype=x.dtype, device=x.device)
+        
+        # Create meshgrid
+        yy_channel, xx_channel = torch.meshgrid(yy_range, xx_range, indexing='ij')
+        
+        # Normalize to [-1, 1]
+        if w > 1:
+            xx_channel = xx_channel / (w - 1) * 2 - 1
+        if h > 1:
+            yy_channel = yy_channel / (h - 1) * 2 - 1
+
+        # Expand to batch dimension and add channel dimension
+        # (H, W) -> (1, 1, H, W) -> (B, 1, H, W)
+        xx_channel = xx_channel.unsqueeze(0).unsqueeze(0).expand(b, -1, -1, -1)
+        yy_channel = yy_channel.unsqueeze(0).unsqueeze(0).expand(b, -1, -1, -1)
+
+        ret = torch.cat([x, xx_channel, yy_channel], dim=1)
+
+        if self.with_r:
+            rr = torch.sqrt(xx_channel**2 + yy_channel**2)
+            ret = torch.cat([ret, rr], dim=1)
+
+        return self.conv(ret)
+
+
+class SeparableConv2d(nn.Module):
+    """Separable 2D convolution: temporal (1×k) followed by frequency (k×1).
+
+    Decouples time and frequency processing for spectrograms by using
+    anisotropic kernels that treat these dimensions independently.
+
+    Attributes:
+        conv_temporal (nn.Conv2d): Temporal convolution (1×k along time axis).
+        bn1 (nn.BatchNorm2d): Batch normalization after temporal convolution.
+        conv_frequency (nn.Conv2d): Frequency convolution (k×1 along frequency axis).
+        bn2 (nn.BatchNorm2d): Batch normalization after frequency convolution.
+        act (nn.Module): Activation function.
+    """
+
+    def __init__(self, c1: int, c2: int, k: int = 3, s: int = 1, dilation: int = 1, act: bool = True):
+        """Initialize SeparableConv2d with anisotropic kernels.
+
+        Args:
+            c1 (int): Number of input channels.
+            c2 (int): Number of output channels.
+            k (int): Kernel size for both temporal and frequency dimensions.
+            s (int): Stride.
+            dilation (int): Dilation factor for temporal convolution.
+            act (bool): Whether to use activation function.
+        """
+        super().__init__()
+        # Temporal: 1×k along width (time axis)
+        self.conv_temporal = nn.Conv2d(
+            c1, c1,
+            kernel_size=(1, k),
+            stride=s,
+            padding=(0, (k - 1) // 2 * dilation),
+            dilation=(1, dilation),
+            groups=c1,
+            bias=False
+        )
+        self.bn1 = nn.BatchNorm2d(c1)
+
+        # Frequency: k×1 along height (frequency axis)
+        self.conv_frequency = nn.Conv2d(
+            c1, c2,
+            kernel_size=(k, 1),
+            stride=s,
+            padding=((k - 1) // 2, 0),
+            bias=False
+        )
+        self.bn2 = nn.BatchNorm2d(c2)
+        self.act = nn.SiLU() if act else nn.Identity()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply separable convolution to input tensor.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (B, C, H, W).
+
+        Returns:
+            (torch.Tensor): Output tensor after anisotropic convolution.
+        """
+        x = self.act(self.bn1(self.conv_temporal(x)))
+        x = self.act(self.bn2(self.conv_frequency(x)))
+        return x

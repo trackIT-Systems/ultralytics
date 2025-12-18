@@ -76,12 +76,15 @@ class Detect(nn.Module):
     legacy = False  # backward compatibility for v3/v5/v8/v9 models
     xyxy = False  # xyxy or xywh output
 
-    def __init__(self, nc: int = 80, ch: tuple = ()):
+    def __init__(self, nc: int = 80, ch: tuple = (), kernel_config: dict | None = None):
         """Initialize the YOLO detection layer with specified number of classes and channels.
 
         Args:
             nc (int): Number of classes.
             ch (tuple): Tuple of channel sizes from backbone feature maps.
+            kernel_config (dict | None): Optional dict with 'kernel_sizes' and 'dilations' for cv3.
+                                        e.g., {'kernel_sizes': [7, 5, 3], 'dilations': [2, 2, 2]}
+                                        If provided, uses SeparableConv2d with anisotropic kernels.
         """
         super().__init__()
         self.nc = nc  # number of classes
@@ -90,21 +93,46 @@ class Detect(nn.Module):
         self.no = nc + self.reg_max * 4  # number of outputs per anchor
         self.stride = torch.zeros(self.nl)  # strides computed during build
         c2, c3 = max((16, ch[0] // 4, self.reg_max * 4)), max(ch[0], min(self.nc, 100))  # channels
+        
+        # Box regression head (cv2) - keep standard
         self.cv2 = nn.ModuleList(
             nn.Sequential(Conv(x, c2, 3), Conv(c2, c2, 3), nn.Conv2d(c2, 4 * self.reg_max, 1)) for x in ch
         )
-        self.cv3 = (
-            nn.ModuleList(nn.Sequential(Conv(x, c3, 3), Conv(c3, c3, 3), nn.Conv2d(c3, self.nc, 1)) for x in ch)
-            if self.legacy
-            else nn.ModuleList(
+        
+        # Classification head (cv3) - use anisotropic convolutions if kernel_config provided
+        if kernel_config is not None:
+            # Use SeparableConv2d with per-scale kernel configuration
+            from .conv import SeparableConv2d
+            kernel_sizes = kernel_config.get('kernel_sizes', [7, 5, 3])
+            dilations = kernel_config.get('dilations', [2, 2, 2])
+            # Pad lists if fewer scales than detection heads
+            while len(kernel_sizes) < self.nl:
+                kernel_sizes.append(kernel_sizes[-1])
+            while len(dilations) < self.nl:
+                dilations.append(dilations[-1])
+            
+            self.cv3 = nn.ModuleList(
                 nn.Sequential(
-                    nn.Sequential(DWConv(x, x, 3), Conv(x, c3, 1)),
-                    nn.Sequential(DWConv(c3, c3, 3), Conv(c3, c3, 1)),
-                    nn.Conv2d(c3, self.nc, 1),
-                )
-                for x in ch
+                    SeparableConv2d(x, c3, k=kernel_sizes[i], dilation=dilations[i]),
+                    SeparableConv2d(c3, c3, k=kernel_sizes[i], dilation=dilations[i]),
+                    nn.Conv2d(c3, self.nc, 1)
+                ) for i, x in enumerate(ch)
             )
-        )
+        else:
+            # Standard cv3 head
+            self.cv3 = (
+                nn.ModuleList(nn.Sequential(Conv(x, c3, 3), Conv(c3, c3, 3), nn.Conv2d(c3, self.nc, 1)) for x in ch)
+                if self.legacy
+                else nn.ModuleList(
+                    nn.Sequential(
+                        nn.Sequential(DWConv(x, x, 3), Conv(x, c3, 1)),
+                        nn.Sequential(DWConv(c3, c3, 3), Conv(c3, c3, 1)),
+                        nn.Conv2d(c3, self.nc, 1),
+                    )
+                    for x in ch
+                )
+            )
+        
         self.dfl = DFL(self.reg_max) if self.reg_max > 1 else nn.Identity()
 
         if self.end2end:

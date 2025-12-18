@@ -1,0 +1,53 @@
+# Ultralytics YOLO11 Bat Call Detection Model 🚀 AGPL-3.0 License
+# Optimized for 256×1600 spectrogram images
+# Model docs: https://docs.ultralytics.com/models/yolo11
+# Task docs: https://docs.ultralytics.com/tasks/detect
+
+# Parameters
+nc: 20  # number of classes (adjust for your dataset)
+scales: # model compound scaling constants
+  # [depth, width, max_channels]
+  n: [0.50, 0.25, 1024]  # summary: 181 layers, 2624080 parameters, 2624064 gradients, 6.6 GFLOPs
+  s: [0.50, 0.50, 1024]  # summary: 181 layers, 9458752 parameters, 9458736 gradients, 21.7 GFLOPs
+  m: [0.50, 1.00, 512]   # summary: 231 layers, 20114688 parameters, 20114672 gradients, 68.5 GFLOPs
+  l: [1.00, 1.00, 512]   # summary: 357 layers, 25372160 parameters, 25372144 gradients, 87.6 GFLOPs
+  x: [1.00, 1.50, 512]   # summary: 357 layers, 56966176 parameters, 56966160 gradients, 196.0 GFLOPs
+
+# YOLO11-Bat backbone
+backbone:
+  # CoordConv at input for frequency awareness
+  - [-1, 1, CoordConv, [64, 3, 2]]              # 0-P1/2 with coordinate channels
+  - [-1, 1, Conv, [128, 3, 2]]                  # 1-P2/4
+  - [-1, 2, C3k2, [256, False, 0.25]]           # 2
+  - [-1, 1, Conv, [256, 3, 2]]                  # 3-P3/8
+  - [-1, 2, C3k2, [512, False, 0.25]]           # 4
+  - [-1, 1, Conv, [512, 3, 2]]                  # 5-P4/16
+  - [-1, 2, C3k2, [512, True]]                  # 6
+  # No P5 layer - removed for bat calls (stride 32 is too coarse)
+  - [-1, 1, CoordConv, [512, 1, 1]]             # 7 - CoordConv before SPPF
+  - [-1, 1, TemporalDilatedSPPF, [512, 5]]      # 8 - Temporal dilated pooling
+  - [-1, 2, TemporalC2PSA, [512]]               # 9 - Temporal attention
+
+# YOLO11-Bat head (P2, P3, P4 detection heads)
+head:
+  # P4 -> P3 upsampling (start from backbone end, upsample to P3 level)
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]  # 10 - upsample to match P3
+  - [[-1, 4], 1, Concat, [1]]                   # 11 - cat backbone P3
+  - [-1, 2, C3k2, [256, False]]                 # 12
+
+  # P3 -> P2 upsampling
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]  # 13 - upsample to match P2
+  - [[-1, 1], 1, Concat, [1]]                   # 14 - cat backbone P2
+  - [-1, 2, C3k2, [128, False]]                 # 15 (P2/4-small)
+
+  # P2 -> P3 downsampling
+  - [-1, 1, Conv, [128, 3, 2]]                  # 16 - downsample
+  - [[-1, 12], 1, Concat, [1]]                  # 17 - cat head P3
+  - [-1, 2, C3k2, [256, False]]                 # 18 (P3/8-medium)
+
+  # P3 -> P4 downsampling
+  - [-1, 1, Conv, [256, 3, 2]]                  # 19 - downsample
+  - [[-1, 6], 1, Concat, [1]]                   # 20 - cat backbone P4
+  - [-1, 2, C3k2, [512, False]]                 # 21 (P4/16-large)
+
+  - [[15, 18, 21], 1, Detect, [nc]]             # 22 - Detect(P2, P3, P4)

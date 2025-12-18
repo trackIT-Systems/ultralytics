@@ -51,6 +51,10 @@ __all__ = (
     "RepVGGDW",
     "ResNetLayer",
     "SCDown",
+    "TemporalAttention",
+    "TemporalC2PSA",
+    "TemporalDilatedSPPF",
+    "TemporalPSABlock",
     "TorchVision",
 )
 
@@ -1943,3 +1947,229 @@ class SAVPE(nn.Module):
         aggregated = score.transpose(-2, -3) @ x.reshape(B, self.c, C // self.c, -1).transpose(-1, -2)
 
         return F.normalize(aggregated.transpose(-2, -3).reshape(B, Q, -1), dim=-1, p=2)
+
+
+class TemporalDilatedSPPF(nn.Module):
+    """Temporal-Dilated Spatial Pyramid Pooling Fast (SPPF) layer.
+
+    Uses 1D dilated convolutions along the time axis to capture
+    global temporal rhythm without losing frequency resolution.
+    Better for spectrograms than standard max-pooling.
+
+    Attributes:
+        cv1 (Conv): Initial 1x1 convolution to reduce channels.
+        temporal_conv1 (nn.Conv2d): 1D temporal convolution with dilation=1.
+        temporal_conv2 (nn.Conv2d): 1D temporal convolution with dilation=2.
+        temporal_conv4 (nn.Conv2d): 1D temporal convolution with dilation=4.
+        bn1 (nn.BatchNorm2d): Batch normalization for dilation=1 conv.
+        bn2 (nn.BatchNorm2d): Batch normalization for dilation=2 conv.
+        bn4 (nn.BatchNorm2d): Batch normalization for dilation=4 conv.
+        act (nn.SiLU): Activation function.
+        cv2 (Conv): Final 1x1 convolution to combine features.
+    """
+
+    def __init__(self, c1: int, c2: int, k: int = 5):
+        """Initialize TemporalDilatedSPPF layer.
+
+        Args:
+            c1 (int): Number of input channels.
+            c2 (int): Number of output channels.
+            k (int): Base kernel size (will use 1×k kernels). Default is 5 but actual kernel is 1×3.
+        """
+        super().__init__()
+        c_ = c1 // 2  # hidden channels
+        self.cv1 = Conv(c1, c_, 1, 1)
+
+        # Three 1D temporal convolutions with different dilations
+        # 1×3 kernels along time axis (width)
+        self.temporal_conv1 = nn.Conv2d(c_, c_, kernel_size=(1, 3),
+                                       stride=1, padding=(0, 1),
+                                       dilation=(1, 1), bias=False)
+        self.temporal_conv2 = nn.Conv2d(c_, c_, kernel_size=(1, 3),
+                                       stride=1, padding=(0, 2),
+                                       dilation=(1, 2), bias=False)
+        self.temporal_conv4 = nn.Conv2d(c_, c_, kernel_size=(1, 3),
+                                       stride=1, padding=(0, 4),
+                                       dilation=(1, 4), bias=False)
+
+        self.bn1 = nn.BatchNorm2d(c_)
+        self.bn2 = nn.BatchNorm2d(c_)
+        self.bn4 = nn.BatchNorm2d(c_)
+        self.act = nn.SiLU()
+
+        # Combine all features
+        self.cv2 = Conv(c_ * 4, c2, 1, 1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply temporal-dilated SPPF to input tensor.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (B, C, H, W).
+
+        Returns:
+            (torch.Tensor): Output tensor with multi-scale temporal features.
+        """
+        y = self.cv1(x)
+        y1 = self.act(self.bn1(self.temporal_conv1(y)))
+        y2 = self.act(self.bn2(self.temporal_conv2(y)))
+        y4 = self.act(self.bn4(self.temporal_conv4(y)))
+        return self.cv2(torch.cat([y, y1, y2, y4], 1))
+
+
+class TemporalAttention(nn.Module):
+    """Temporal-aware attention for spectrograms.
+
+    Applies anisotropic attention that treats time and frequency
+    dimensions differently, with emphasis on temporal patterns.
+
+    Attributes:
+        num_heads (int): Number of attention heads.
+        head_dim (int): Dimension of each attention head.
+        key_dim (int): Dimension of attention keys.
+        scale (float): Scaling factor for attention scores.
+        qkv (Conv): Convolution for computing query, key, and value.
+        proj (Conv): Projection convolution.
+        pe_temporal (nn.Conv2d): Temporal positional encoding (1×k kernel).
+        pe_frequency (nn.Conv2d): Frequency positional encoding (k×1 kernel).
+    """
+
+    def __init__(self, dim: int, num_heads: int = 8, attn_ratio: float = 0.5):
+        """Initialize TemporalAttention module.
+
+        Args:
+            dim (int): Input dimension.
+            num_heads (int): Number of attention heads.
+            attn_ratio (float): Ratio for computing key dimension.
+        """
+        super().__init__()
+        self.num_heads = num_heads
+        self.head_dim = dim // num_heads
+        self.key_dim = int(self.head_dim * attn_ratio)
+        self.scale = self.key_dim ** -0.5
+
+        nh_kd = self.key_dim * num_heads
+        h = dim + nh_kd * 2
+
+        self.qkv = Conv(dim, h, 1, act=False)
+        self.proj = Conv(dim, dim, 1, act=False)
+
+        # Temporal positional encoding: 1×k kernel (time axis)
+        self.pe_temporal = nn.Conv2d(dim, dim, kernel_size=(1, 7),
+                                    padding=(0, 3), groups=dim, bias=False)
+        # Frequency positional encoding: k×1 kernel (freq axis)
+        self.pe_frequency = nn.Conv2d(dim, dim, kernel_size=(7, 1),
+                                     padding=(3, 0), groups=dim, bias=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply temporal attention to input tensor.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (B, C, H, W).
+
+        Returns:
+            (torch.Tensor): Output tensor after temporal attention.
+        """
+        B, C, H, W = x.shape
+        N = H * W
+
+        qkv = self.qkv(x)
+        q, k, v = qkv.view(B, self.num_heads, self.key_dim * 2 + self.head_dim, N).split(
+            [self.key_dim, self.key_dim, self.head_dim], dim=2
+        )
+
+        # Compute attention
+        attn = (q.transpose(-2, -1) @ k) * self.scale
+        
+        attn = attn.softmax(dim=-1)
+
+        # Apply attention and add temporal + frequency positional encodings
+        x = (v @ attn.transpose(-2, -1)).view(B, C, H, W)
+        x = x + self.pe_temporal(v.reshape(B, C, H, W)) + self.pe_frequency(v.reshape(B, C, H, W))
+        x = self.proj(x)
+        
+        return x
+
+
+class TemporalPSABlock(nn.Module):
+    """PSA block with temporal attention for bat call detection.
+
+    This class encapsulates temporal attention and feed-forward layers
+    with optional shortcut connections for processing spectrogram features.
+
+    Attributes:
+        attn (TemporalAttention): Temporal attention module.
+        ffn (nn.Sequential): Feed-forward network.
+        add (bool): Whether to use shortcut connections.
+    """
+
+    def __init__(self, c: int, attn_ratio: float = 0.5, num_heads: int = 4, shortcut: bool = True):
+        """Initialize TemporalPSABlock.
+
+        Args:
+            c (int): Number of input and output channels.
+            attn_ratio (float): Attention ratio for key dimension.
+            num_heads (int): Number of attention heads.
+            shortcut (bool): Whether to use shortcut connections.
+        """
+        super().__init__()
+        self.attn = TemporalAttention(c, attn_ratio=attn_ratio, num_heads=num_heads)
+        self.ffn = nn.Sequential(Conv(c, c * 2, 1), Conv(c * 2, c, 1, act=False))
+        self.add = shortcut
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass through TemporalPSABlock.
+
+        Args:
+            x (torch.Tensor): Input tensor.
+
+        Returns:
+            (torch.Tensor): Output tensor after temporal attention and FFN.
+        """
+        x = x + self.attn(x) if self.add else self.attn(x)
+        x = x + self.ffn(x) if self.add else self.ffn(x)
+        return x
+
+
+class TemporalC2PSA(nn.Module):
+    """C2PSA with temporal attention for bat call detection.
+
+    This module extends C2PSA with temporal-aware attention mechanisms
+    specifically designed for processing bat call spectrograms.
+
+    Attributes:
+        c (int): Number of hidden channels.
+        cv1 (Conv): 1x1 convolution to split input into two branches.
+        cv2 (Conv): 1x1 convolution to merge outputs.
+        m (nn.Sequential): Sequential container of TemporalPSABlock modules.
+    """
+
+    def __init__(self, c1: int, c2: int, n: int = 1, e: float = 0.5):
+        """Initialize TemporalC2PSA module.
+
+        Args:
+            c1 (int): Number of input channels.
+            c2 (int): Number of output channels.
+            n (int): Number of TemporalPSABlock modules.
+            e (float): Expansion ratio for hidden channels.
+        """
+        super().__init__()
+        assert c1 == c2
+        self.c = int(c1 * e)
+        self.cv1 = Conv(c1, 2 * self.c, 1, 1)
+        self.cv2 = Conv(2 * self.c, c1, 1)
+        self.m = nn.Sequential(*(TemporalPSABlock(self.c, attn_ratio=0.5,
+                                                   num_heads=self.c // 64)
+                                for _ in range(n)))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass through TemporalC2PSA.
+
+        Args:
+            x (torch.Tensor): Input tensor.
+
+        Returns:
+            (torch.Tensor): Output tensor after temporal attention processing.
+        """
+        a, b = self.cv1(x).split((self.c, self.c), dim=1)
+        b = self.m(b)
+        return self.cv2(torch.cat((a, b), 1))
