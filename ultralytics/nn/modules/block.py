@@ -2082,9 +2082,14 @@ class TemporalAttention(nn.Module):
         
         attn = attn.softmax(dim=-1)
 
-        # Apply attention and add temporal + frequency positional encodings
+        # # Apply attention and add temporal + frequency positional encodings
+        # x = (v @ attn.transpose(-2, -1)).view(B, C, H, W)
+        # x = x + self.pe_temporal(v.reshape(B, C, H, W)) + self.pe_frequency(v.reshape(B, C, H, W))
+        
+        # Best - single expression like standard attention:
         x = (v @ attn.transpose(-2, -1)).view(B, C, H, W)
-        x = x + self.pe_temporal(v.reshape(B, C, H, W)) + self.pe_frequency(v.reshape(B, C, H, W))
+        v_rs = v.reshape(B, C, H, W)
+        x = x + self.pe_temporal(v_rs) + self.pe_frequency(v_rs)
         x = self.proj(x)
         
         return x
