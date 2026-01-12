@@ -22,6 +22,14 @@ from .utils import bias_init_with_prob, linear_init
 
 __all__ = "OBB", "Classify", "Detect", "Pose", "RTDETRDecoder", "Segment", "YOLOEDetect", "YOLOESegment", "v10Detect"
 
+# Test kernel configuration for anisotropic convolutions in Detect head
+# Set to None to use standard cv3 path, or provide dict for testing:
+# Example: {'kernel_sizes': [7, 5, 3, 3], 'dilations': [2, 2, 2, 1]}
+# kernel_sizes and dilations should match the number of detection heads (P2, P3, P4, P5)
+TEST_KERNEL_CONFIG = {
+    'kernel_sizes': [7, 5, 3, 3],  # Larger kernels for lower resolution heads
+    'dilations': [2, 2, 2, 1]      # Higher dilation for more context
+}
 
 class Detect(nn.Module):
     """YOLO Detect head for object detection models.
@@ -85,6 +93,7 @@ class Detect(nn.Module):
             kernel_config (dict | None): Optional dict with 'kernel_sizes' and 'dilations' for cv3.
                                         e.g., {'kernel_sizes': [7, 5, 3], 'dilations': [2, 2, 2]}
                                         If provided, uses SeparableConv2d with anisotropic kernels.
+                                        If None, falls back to TEST_KERNEL_CONFIG module variable.
         """
         super().__init__()
         self.nc = nc  # number of classes
@@ -93,6 +102,10 @@ class Detect(nn.Module):
         self.no = nc + self.reg_max * 4  # number of outputs per anchor
         self.stride = torch.zeros(self.nl)  # strides computed during build
         c2, c3 = max((16, ch[0] // 4, self.reg_max * 4)), max(ch[0], min(self.nc, 100))  # channels
+        
+        # Use TEST_KERNEL_CONFIG if kernel_config not provided
+        # if kernel_config is None:
+        #     kernel_config = TEST_KERNEL_CONFIG
         
         # Box regression head (cv2) - keep standard
         self.cv2 = nn.ModuleList(
