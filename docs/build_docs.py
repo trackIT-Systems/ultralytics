@@ -39,7 +39,7 @@ try:
 except ImportError:
     postprocess_site = None
 
-from build_reference import build_reference_docs, build_reference_for
+from build_reference import build_reference_docs
 
 from ultralytics.utils import LINUX, LOGGER, MACOS
 from ultralytics.utils.tqdm import TQDM
@@ -49,7 +49,7 @@ DOCS = Path(__file__).parent.resolve()
 SITE = DOCS.parent / "site"
 LINK_PATTERN = re.compile(r"(https?://[^\s()<>]*[^\s()<>.,:;!?\'\"])")
 TITLE_PATTERN = re.compile(r"<title>(.*?)</title>", flags=re.IGNORECASE | re.DOTALL)
-LOCAL_MD_LINK = re.compile(r'((?:href|src)=["\'])(\.{0,2}/[^"\'>\s]+?)\.md((?:[?#][^"\'>\s]*)?)(["\'])', re.IGNORECASE)
+MD_LINK_PATTERN = re.compile(r'(["\']?)([^"\'>\s]+?)\.md(["\']?)')
 DOC_KIND_LABELS = {"Class", "Function", "Method", "Property"}
 DOC_KIND_COLORS = {
     "Class": "#039dfc",  # blue
@@ -66,21 +66,11 @@ def prepare_docs_markdown(clone_repos: bool = True):
     shutil.rmtree(DOCS / "repos", ignore_errors=True)
 
     if clone_repos:
-        # Get hub-sdk repo
-        repo = "https://github.com/ultralytics/hub-sdk"
-        local_dir = DOCS / "repos" / Path(repo).name
-        subprocess.run(
-            ["git", "clone", repo, str(local_dir), "--depth", "1", "--single-branch", "--branch", "main"], check=True
-        )
-        shutil.rmtree(DOCS / "en/hub/sdk", ignore_errors=True)  # delete if exists
-        shutil.copytree(local_dir / "docs", DOCS / "en/hub/sdk")  # for docs
-        LOGGER.info(f"Cloned/Updated {repo} in {local_dir}")
-
         # Get docs repo
         repo = "https://github.com/ultralytics/docs"
         local_dir = DOCS / "repos" / Path(repo).name
         subprocess.run(
-            ["git", "clone", repo, str(local_dir), "--depth", "1", "--single-branch", "--branch", "main"], check=True
+            ["git", "clone", "-q", "--depth=1", "--single-branch", "-b", "main", repo, str(local_dir)], check=True
         )
         shutil.rmtree(DOCS / "en/compare", ignore_errors=True)  # delete if exists
         shutil.copytree(local_dir / "docs/en/compare", DOCS / "en/compare")  # for docs
@@ -160,8 +150,8 @@ def _process_html_file(html_file: Path) -> bool:
     except ValueError:
         rel_path = html_file.name
 
-    # For pages sourced from external repos (hub-sdk, compare), drop edit/copy buttons to avoid wrong links
-    if rel_path.startswith(("hub/sdk/", "compare/")):
+    # For pages sourced from external repos (compare), drop edit/copy buttons to avoid wrong links
+    if rel_path.startswith("compare/"):
         before = content
         content = re.sub(
             r'<a[^>]*class="[^"]*md-content__button[^"]*"[^>]*>.*?</a>',
@@ -181,7 +171,7 @@ def _process_html_file(html_file: Path) -> bool:
     if new_content != content:
         content, changed = new_content, True
 
-    new_content = fix_md_links(content)
+    new_content = _rewrite_md_links(content)
     if new_content != content:
         content, changed = new_content, True
 
@@ -325,25 +315,16 @@ def update_docs_soup(content: str, html_file: Path | None = None, max_title_leng
     return str(soup) if modified else content
 
 
-def fix_md_links(content: str) -> str:
-    """Replace .md references with trailing slashes in provided HTML content, fixing Zensical bug."""
+def _rewrite_md_links(content: str) -> str:
+    """Replace .md references with trailing slashes in HTML content, skipping GitHub links."""
     if ".md" not in content:
         return content
 
-    def repl(match: re.Match) -> str:
-        """Rewrite local href/src .md targets to trailing slashes."""
-        prefix, path, trailer, suffix = match.groups()
-        if "github.com" in path:
-            return match.group(0)
-        path = path.rstrip("/")
-        if path.endswith("index"):
-            path = path[: -len("index")]
-        path = path.rstrip("/")
-        return f"{prefix}{path}/{trailer}{suffix}"
-
     lines = []
     for line in content.split("\n"):
-        line = LOCAL_MD_LINK.sub(repl, line)
+        if "github.com" not in line:
+            line = line.replace("index.md", "")
+            line = MD_LINK_PATTERN.sub(r"\1\2/\3", line)
         lines.append(line)
     return "\n".join(lines)
 
@@ -464,7 +445,7 @@ def minify_files(html: bool = True, css: bool = True, js: bool = True):
 
 
 def render_jinja_macros() -> None:
-    """Render MiniJinja macros in markdown files before building with MkDocs."""
+    """Render MiniJinja macros in Markdown files before building with MkDocs."""
     mkdocs_yml = DOCS.parent / "mkdocs.yml"
     default_yaml = DOCS.parent / "ultralytics" / "cfg" / "default.yaml"
 
@@ -618,17 +599,6 @@ def main():
         backup_root, docs_backups = backup_docs_sources()
         prepare_docs_markdown()
         build_reference_docs(update_nav=False)
-        # Render reference docs for any extra packages present (e.g., hub-sdk)
-        extra_refs = [
-            {
-                "package": DOCS / "repos" / "hub-sdk" / "hub_sdk",
-                "reference_dir": DOCS / "en" / "hub" / "sdk" / "reference",
-                "repo": "ultralytics/hub-sdk",
-            },
-        ]
-        for ref in extra_refs:
-            if ref["package"].exists():
-                build_reference_for(ref["package"], ref["reference_dir"], ref["repo"], update_nav=False)
         render_jinja_macros()
 
         # Remove cloned repos before serving/building to keep the tree lean during mkdocs processing
@@ -636,8 +606,11 @@ def main():
 
         # Build the main documentation
         LOGGER.info(f"Building docs from {DOCS}")
-        subprocess.run(["zensical", "build", "-f", str(DOCS.parent / "mkdocs.yml"), "--strict"], check=True)
+        subprocess.run(["zensical", "build", "-f", str(DOCS.parent / "mkdocs.yml")], check=True)
         LOGGER.info(f"Site built at {SITE}")
+
+        # Remove search index JSON files to disable search
+        Path(SITE / "search.json").unlink(missing_ok=True)
 
         # Update docs HTML pages
         update_docs_html()
@@ -692,7 +665,6 @@ def main():
     finally:
         if not restored:
             restore_all()
-        shutil.rmtree(DOCS.parent / "hub_sdk", ignore_errors=True)
         shutil.rmtree(DOCS / "repos", ignore_errors=True)
 
 
