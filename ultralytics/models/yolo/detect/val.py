@@ -154,6 +154,7 @@ class DetectionValidator(BaseValidator):
             "imgsz": imgsz,
             "ratio_pad": ratio_pad,
             "im_file": batch["im_file"][si],
+            "time": batch["time"][si],
         }
 
     def _prepare_pred(self, pred: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
