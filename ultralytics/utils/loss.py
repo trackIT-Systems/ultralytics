@@ -360,11 +360,9 @@ class v8DetectionLoss:
         self.bbox_loss = BboxLoss(m.reg_max).to(device)
         self.proj = torch.arange(m.reg_max, dtype=torch.float, device=device)
         
-        # Sequence-aware loss parameters (experimental)
-        self.use_sequence_loss = getattr(h, 'use_sequence_loss', False)  # Enable/disable sequence loss
-        self.sequence_loss_weight = getattr(h, 'sequence_loss_weight', 0.5)  # 0.5-2.0 recommended (now properly scaled)
-        self.sequence_mode = getattr(h, 'sequence_mode', 'class')  # 'class' or 'speaker'
-        self.sequence_loss_type = getattr(h, 'sequence_loss_type', 'smoothness')  # 'variance', 'consensus', 'smoothness'
+        # Global consistency loss parameters
+        self.use_global_loss = getattr(h, 'use_global_loss', False)
+        self.global_loss_weight = getattr(h, 'global_loss_weight', 0.5)
 
     def preprocess(self, targets: torch.Tensor, batch_size: int, scale_tensor: torch.Tensor) -> torch.Tensor:
         """Preprocess targets by converting to tensor format and scaling coordinates."""
@@ -382,6 +380,71 @@ class v8DetectionLoss:
                     out[j, :n] = targets[matches, 1:]
             out[..., 1:5] = xywh2xyxy(out[..., 1:5].mul_(scale_tensor))
         return out
+
+    def build_global_targets(self, gt_labels: torch.Tensor, mask_gt: torch.Tensor, batch_size: int) -> torch.Tensor:
+        """Build global multi-label target indicating which classes are present in each image.
+        
+        Args:
+            gt_labels: Ground truth class labels, shape (batch_size, max_gt, 1)
+            mask_gt: Mask indicating valid ground truth boxes, shape (batch_size, max_gt, 1)
+            batch_size: Number of images in batch
+        
+        Returns:
+            Binary tensor of shape (batch_size, num_classes) where 1 indicates class presence
+        """
+        global_target = torch.zeros(batch_size, self.nc, device=self.device)
+        
+        for batch_idx in range(batch_size):
+            # Get valid GT labels for this image
+            valid_mask = mask_gt[batch_idx, :, 0].bool()
+            valid_labels = gt_labels[batch_idx, valid_mask, 0].long()
+            
+            # Set to 1.0 for classes that exist in GT
+            if valid_labels.numel() > 0:
+                global_target[batch_idx, valid_labels] = 1.0
+        
+        return global_target
+
+    def compute_global_consistency_loss(
+        self, 
+        pred_scores: torch.Tensor, 
+        gt_labels: torch.Tensor, 
+        mask_gt: torch.Tensor
+    ) -> torch.Tensor:
+        """Compute global multi-label consistency loss using max-pooling.
+        
+        Penalizes the model when it predicts classes that don't exist in the ground truth.
+        Uses max-pooling to detect if ANY anchor predicts a false positive class.
+        
+        Args:
+            pred_scores: Predicted class scores, shape (batch_size, num_anchors, num_classes)
+            gt_labels: Ground truth class labels, shape (batch_size, max_gt, 1)
+            mask_gt: Mask indicating valid ground truth boxes, shape (batch_size, max_gt, 1)
+        
+        Returns:
+            Global consistency loss (scalar)
+        """
+        batch_size = pred_scores.shape[0]
+        
+        # Build global target: which classes exist in each image
+        global_target = self.build_global_targets(gt_labels, mask_gt, batch_size)
+        
+        # Compute global prediction: max logit per class across all anchors
+        # Shape: (batch_size, num_classes)
+        # Note: We use raw logits (before sigmoid) for numerical stability with autocast
+        global_pred = pred_scores.max(dim=1).values
+        
+        # Binary cross-entropy loss with logits (numerically stable)
+        loss = F.binary_cross_entropy_with_logits(
+            global_pred, 
+            global_target, 
+            reduction='sum'
+        )
+        
+        # Normalize by batch size and number of classes
+        loss = loss / (batch_size * self.nc)
+        
+        return loss
 
     def bbox_decode(self, anchor_points: torch.Tensor, pred_dist: torch.Tensor) -> torch.Tensor:
         """Decode predicted object bounding box coordinates from anchor points and distribution."""
@@ -645,26 +708,19 @@ class v8DetectionLoss:
                 stride_tensor,
             )
 
-        # Sequence-aware loss (experimental)
-        if self.use_sequence_loss and fg_mask.sum():
-            loss[3] = self.compute_sequence_loss(
+        # Global consistency loss
+        if self.use_global_loss:
+            loss[3] = self.compute_global_consistency_loss(
                 pred_scores,
-                pred_bboxes,
-                target_scores,  # Use assigned target scores instead of gt_labels
-                target_gt_idx,
-                fg_mask,
                 gt_labels,
-                gt_bboxes,
-                mask_gt,
-                batch,
-                target_scores_sum,
+                mask_gt
             )
         
         loss[0] *= self.hyp.box  # box gain
         loss[1] *= self.hyp.cls  # cls gain
         loss[2] *= self.hyp.dfl  # dfl gain
-        if self.use_sequence_loss:
-            loss[3] *= self.sequence_loss_weight  # sequence gain
+        if self.use_global_loss:
+            loss[3] *= self.global_loss_weight  # global gain
         return (
             (fg_mask, target_gt_idx, target_bboxes, anchor_points, stride_tensor),
             loss,
