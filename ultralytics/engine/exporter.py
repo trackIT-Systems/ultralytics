@@ -643,7 +643,7 @@ class Exporter:
                 f'\nExport complete ({time.time() - t:.1f}s)'
                 #f"\nResults saved to {colorstr('bold', self.file.parent.resolve())}"
                 f"\nResults saved to {colorstr('bold', self.file.resolve())}"
-                f'\nPredict:         yolo predict task={model.task} model={f} imgsz={imgsz} {q} {predict_data}'
+                f'\nPredict:         yolo predict task={model.task} model={f} imgsz={imgsz} {q}'
                 f'\nValidate:        yolo val task={model.task} model={f} imgsz={imgsz} data={data} {q} {s}'
                 f'\nVisualize:       https://netron.app'
             )
