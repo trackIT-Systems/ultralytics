@@ -569,6 +569,10 @@ class Exporter:
             "n_fft": self.args.n_fft,
             "sample_rate": self.args.sr,
             "hop_length": self.args.hop_length,
+            "analyze_length": self.args.analyze_length,
+            "spec_scale": self.args.spec_scale,
+            "n_mels": self.args.n_mels,
+            "htk": self.args.htk,
             "args": {k: v for k, v in self.args if k in fmt_keys},
             "channels": model.yaml.get("channels", 3),
         }  # model metadata
