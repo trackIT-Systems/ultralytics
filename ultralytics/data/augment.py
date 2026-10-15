@@ -2035,7 +2035,9 @@ class Albumentations:
                     new = self.transform(image=im, bboxes=bboxes, class_labels=cls)  # transformed
                     if len(new["class_labels"]) > 0:  # skip update if no bbox in new im
                         labels["img"] = new["image"]
-                        labels["cls"] = np.array(new["class_labels"]) #.reshape(-1, 1)
+                        # Albumentations flattens single-column class_labels to 1D; restore the
+                        # [N, 1] shape so it stays consistent with non-augmented items for collate_fn.
+                        labels["cls"] = np.array(new["class_labels"]).reshape(-1, 1)
                         bboxes = np.array(new["bboxes"], dtype=np.float32)
                     labels["instances"].update(bboxes=bboxes)
         else:
@@ -2164,13 +2166,13 @@ class Format:
             labels["masks"] = masks
             labels["sem_masks"] = sem_masks.float()
         labels["img"] = self._format_img(img)
-        # Handle dual classes: preserve original shape [N, 2] for dual detection
+        # Preserve original shape [N, num_heads] (1 for single-label, 2 for dual detection)
+        # so that empty and non-empty batches concatenate cleanly in collate_fn.
+        num_cols = cls.shape[1] if isinstance(cls, np.ndarray) and cls.ndim == 2 else 1
         if nl:
             labels["cls"] = torch.from_numpy(cls)
         else:
-            # Infer if dual classes from original shape before any processing
-            is_dual = isinstance(cls, np.ndarray) and cls.ndim == 2 and cls.shape[1] == 2
-            labels["cls"] = torch.zeros((0, 2), dtype=torch.long) if is_dual else torch.zeros(nl)
+            labels["cls"] = torch.zeros((0, num_cols), dtype=torch.long)
         labels["bboxes"] = torch.from_numpy(instances.bboxes) if nl else torch.zeros((nl, 4))
         if self.return_keypoint:
             labels["keypoints"] = (

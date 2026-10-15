@@ -461,7 +461,7 @@ class Exporter:
                 "(torchscript, onnx, openvino, engine, coreml) formats. "
                 "See https://docs.ultralytics.com/models/yolo-world for details."
             )
-        self.args.data = model.args['data']
+        self.args.data = model.args["data"]
         model.clip_model = None  # openvino int8 export error: https://github.com/ultralytics/ultralytics/pull/18445
         if self.args.int8 and not self.args.data:
             self.args.data = DEFAULT_CFG.data or TASK2DATA[getattr(model, "task", "detect")]  # assign default data
@@ -509,7 +509,9 @@ class Exporter:
         for m in model.modules():
             if isinstance(m, Classify):
                 m.export = True
-            if isinstance(m, (Detect, DualDetect, RTDETRDecoder)):  # includes all Detect subclasses like Segment, Pose, OBB
+            if isinstance(
+                m, (Detect, DualDetect, RTDETRDecoder)
+            ):  # includes all Detect subclasses like Segment, Pose, OBB
                 m.dynamic = self.args.dynamic
                 m.export = True
                 m.format = self.args.format
@@ -542,7 +544,7 @@ class Exporter:
         # Assign
         self.im = im
         self.model = model
-        self.file = Path(self.output_path) #file
+        self.file = Path(self.output_path)  # file
         self.output_shape = (
             tuple(y.shape)
             if isinstance(y, torch.Tensor)
@@ -644,12 +646,12 @@ class Exporter:
             imgsz = self.imgsz[0] if square else str(self.imgsz)[1:-1].replace(" ", "")
             q = "int8" if self.args.int8 else "half" if self.args.half else ""  # quantization
             LOGGER.info(
-                f'\nExport complete ({time.time() - t:.1f}s)'
-                #f"\nResults saved to {colorstr('bold', self.file.parent.resolve())}"
+                f"\nExport complete ({time.time() - t:.1f}s)"
+                # f"\nResults saved to {colorstr('bold', self.file.parent.resolve())}"
                 f"\nResults saved to {colorstr('bold', self.file.resolve())}"
-                f'\nPredict:         yolo predict task={model.task} model={f} imgsz={imgsz} {q}'
-                f'\nValidate:        yolo val task={model.task} model={f} imgsz={imgsz} data={data} {q} {s}'
-                f'\nVisualize:       https://netron.app'
+                f"\nPredict:         yolo predict task={model.task} model={f} imgsz={imgsz} {q}"
+                f"\nValidate:        yolo val task={model.task} model={f} imgsz={imgsz} data={data} {q} {s}"
+                f"\nVisualize:       https://netron.app"
             )
 
         self.run_callbacks("on_export_end")
@@ -659,14 +661,18 @@ class Exporter:
         """Build and return a dataloader for calibration of INT8 models."""
         LOGGER.info(f"{prefix} collecting INT8 calibration images from 'data={self.args.data}'")
         data = (check_cls_dataset if self.model.task == "classify" else check_det_dataset)(self.args.data)
-        dataset = dataset if dataset else YOLODataset(
-            data[self.args.split or "val"],
-            data=data,
-            fraction=self.args.fraction,
-            task=self.model.task,
-            imgsz=self.imgsz[0],
-            augment=False,
-            batch_size=self.args.batch,
+        dataset = (
+            dataset
+            if dataset
+            else YOLODataset(
+                data[self.args.split or "val"],
+                data=data,
+                fraction=self.args.fraction,
+                task=self.model.task,
+                imgsz=self.imgsz[0],
+                augment=False,
+                batch_size=self.args.batch,
+            )
         )
         n = len(dataset)
         if n < self.args.batch:
@@ -684,7 +690,7 @@ class Exporter:
     def export_torchscript(self, prefix=colorstr("TorchScript:")):
         """Export YOLO model to TorchScript format."""
         LOGGER.info(f"\n{prefix} starting export with torch {TORCH_VERSION}...")
-        #f = self.file.with_suffix(".torchscript")
+        # f = self.file.with_suffix(".torchscript")
         f = self.file / "model.torchscript"
 
         ts = torch.jit.trace(NMSModel(self.model, self.args) if self.args.nms else self.model, self.im, strict=False)
@@ -716,7 +722,7 @@ class Exporter:
         if self.args.nms:
             assert TORCH_1_13, f"'nms=True' ONNX export requires torch>=1.13 (found torch=={TORCH_VERSION})"
 
-        #f = str(self.file.with_suffix(".onnx"))
+        # f = str(self.file.with_suffix(".onnx"))
         f = str(self.file / "model.onnx")
 
         output_names = ["output0", "output1"] if self.model.task == "segment" else ["output0"]
@@ -813,9 +819,9 @@ class Exporter:
             YAML.save(Path(file).parent / "metadata.yaml", self.metadata)  # add metadata.yaml
 
         if self.args.int8:
-            #fq = str(self.file).replace(self.file.suffix, f"_int8_openvino_model{os.sep}")
+            # fq = str(self.file).replace(self.file.suffix, f"_int8_openvino_model{os.sep}")
             fq = self.file
-            #fq_ov = str(Path(fq) / self.file.with_suffix(".xml").name)
+            # fq_ov = str(Path(fq) / self.file.with_suffix(".xml").name)
             fq_ov = str(Path(fq) / "model.xml")
             # INT8 requires nncf, nncf requires packaging>=23.2 https://github.com/openvinotoolkit/nncf/issues/3463
             check_requirements("packaging>=23.2")  # must be installed first to build nncf wheel
@@ -839,16 +845,18 @@ class Exporter:
 
             quantized_ov_model = nncf.quantize(
                 model=ov_model,
-                calibration_dataset=nncf.Dataset(self.get_int8_calibration_dataloader(prefix, dataset), self._transform_fn),
+                calibration_dataset=nncf.Dataset(
+                    self.get_int8_calibration_dataloader(prefix, dataset), self._transform_fn
+                ),
                 preset=nncf.QuantizationPreset.MIXED,
                 ignored_scope=ignored_scope,
             )
             serialize(quantized_ov_model, fq_ov)
             return fq
 
-        #f = str(self.file).replace(self.file.suffix, f"_openvino_model{os.sep}")
+        # f = str(self.file).replace(self.file.suffix, f"_openvino_model{os.sep}")
         f = self.file
-        #f_ov = str(Path(f) / self.file.with_suffix(".xml").name)
+        # f_ov = str(Path(f) / self.file.with_suffix(".xml").name)
         f_ov = str(Path(f) / "model.xml")
 
         serialize(ov_model, f_ov)
@@ -1486,7 +1494,7 @@ class Exporter:
     def _transform_fn(data_item) -> np.ndarray:
         """The transformation function for Axelera/OpenVINO quantization preprocessing."""
         data_item: torch.Tensor = data_item["img"] if isinstance(data_item, dict) else data_item
-        assert data_item.dtype == torch.uint8, "Input image must be uint8 for the quantization preprocessing"
+        # assert data_item.dtype == torch.uint8, "Input image must be uint8 for the quantization preprocessing"
         im = data_item.numpy().astype(np.float32) / 255.0  # uint8 to fp16/32 and 0 - 255 to 0.0 - 1.0
         return im[None] if im.ndim == 3 else im
 

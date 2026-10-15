@@ -245,18 +245,15 @@ class BaseTrainer:
     def _setup_scheduler(self):
         """Initialize training learning rate scheduler."""
         match self.args.lr_schedule:
-            case 'linear':
+            case "linear":
                 self.lf = lambda x: max(1 - x / self.epochs, 0) * (1.0 - self.args.lrf) + self.args.lrf  # linear
-            case 'plateau':
-                self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 
-                                                                  mode='max', 
-                                                                  factor=0.2, 
-                                                                  patience=10, 
-                                                                  min_lr=self.args.lrf)
-            case 'exponential':
-                self.scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer,
-                                                                  gamma=0.95)
-            case 'cos':
+            case "plateau":
+                self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+                    self.optimizer, mode="max", factor=0.2, patience=10, min_lr=self.args.lrf
+                )
+            case "exponential":
+                self.scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=0.95)
+            case "cos":
                 self.lf = one_cycle(1, self.args.lrf, self.epochs)  # cosine 1->hyp['lrf']
             case _:
                 self.lf = lambda x: max(1 - x / self.epochs, 0) * (1.0 - self.args.lrf) + self.args.lrf  # linear
@@ -399,7 +396,7 @@ class BaseTrainer:
             self.run_callbacks("on_train_epoch_start")
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")  # suppress 'Detected lr_scheduler.step() before optimizer.step()'
-                if self.args.lr_schedule == 'plateau':
+                if self.args.lr_schedule == "plateau":
                     self.scheduler.step(self.fitness if self.fitness else 0)
                 else:
                     self.scheduler.step()
@@ -430,8 +427,10 @@ class BaseTrainer:
                             ni,
                             xi,
                             [
-                                self.args.warmup_bias_lr if x.get("param_group") == "bias" else 0.0, self.args.lr0 if self.args.lr_schedule in ['plateau', 'exponential'] else
-                                x["initial_lr"] * self.lf(epoch),
+                                self.args.warmup_bias_lr if x.get("param_group") == "bias" else 0.0,
+                                self.args.lr0
+                                if self.args.lr_schedule in ["plateau", "exponential"]
+                                else x["initial_lr"] * self.lf(epoch),
                             ],
                         )
                         if "momentum" in x:
@@ -507,7 +506,14 @@ class BaseTrainer:
 
             self.nan_recovery_attempts = 0
             if RANK in {-1, 0}:
-                self.save_metrics(metrics={**self.label_loss_items(self.tloss), **self.metrics, **{'val/fitness': self.fitness}, **self.lr})
+                self.save_metrics(
+                    metrics={
+                        **self.label_loss_items(self.tloss),
+                        **self.metrics,
+                        **{"val/fitness": self.fitness},
+                        **self.lr,
+                    }
+                )
                 self.stop |= self.stopper(epoch + 1, self.fitness) or final_epoch
                 if self.args.time:
                     self.stop |= (time.time() - self.train_time_start) > (self.args.time * 3600)
@@ -616,7 +622,7 @@ class BaseTrainer:
                 "epoch": self.epoch,
                 "best_fitness": self.best_fitness,
                 "model": None,  # resume and final checkpoints derive from EMA
-                "ema": deepcopy(unwrap_model(self.ema.ema)),#.half(),
+                "ema": deepcopy(unwrap_model(self.ema.ema)),  # .half(),
                 "updates": self.ema.updates,
                 "optimizer": convert_optimizer_state_dict_to_fp16(deepcopy(self.optimizer.state_dict())),
                 "scaler": self.scaler.state_dict(),

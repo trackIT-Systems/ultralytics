@@ -535,22 +535,22 @@ class ConfusionMatrix(DataExportMixin):
             warnings.simplefilter("ignore")  # suppress empty matrix RuntimeWarning: All-NaN slice encountered
             im = ax.imshow(array, cmap="Blues", vmin=0.0, interpolation="none")
             ax.xaxis.set_label_position("bottom")
-            if nc < 30:  # Add score for each cell of confusion matrix
-                color_threshold = 0.45 * (1 if normalize else np.nanmax(array))  # text color threshold
-                for i, row in enumerate(array[:nc]):
-                    for j, val in enumerate(row[:nc]):
-                        val = array[i, j]
-                        if np.isnan(val):
-                            continue
-                        ax.text(
-                            j,
-                            i,
-                            f"{val:.2f}" if normalize else f"{int(val)}",
-                            ha="center",
-                            va="center",
-                            fontsize=8, #10,
-                            color="white" if val > color_threshold else "black",
-                        )
+            #if nc < 30:  # Add score for each cell of confusion matrix
+            color_threshold = 0.45 * (1 if normalize else np.nanmax(array))  # text color threshold
+            for i, row in enumerate(array[:nc]):
+                for j, val in enumerate(row[:nc]):
+                    val = array[i, j]
+                    if np.isnan(val):
+                        continue
+                    ax.text(
+                        j,
+                        i,
+                        f"{val:.2f}" if normalize else f"{int(val)}",
+                        ha="center",
+                        va="center",
+                        fontsize=8, #10,
+                        color="white" if val > color_threshold else "black",
+                    )
             cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.05)
         title = "Confusion Matrix" + " Normalized" * normalize
         ax.set_xlabel("True") #, fontsize=label_fontsize, labelpad=10)
